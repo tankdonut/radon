@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bell,
   CheckCircle2,
@@ -8,6 +8,8 @@ import {
   ChevronUp,
   Circle,
   ClipboardList,
+  ArrowDown,
+  ArrowUp,
   Search,
   Sparkles,
   TrendingDown,
@@ -297,6 +299,76 @@ function getLastPrice(pos: PortfolioPosition): number | null {
   return mv / (pos.contracts * mult);
 }
 
+function usePriceDirection(price: number | null): {
+  direction: "up" | "down" | null;
+  flashDirection: "up" | "down" | null;
+} {
+  const [direction, setDirection] = useState<"up" | "down" | null>(null);
+  const [flashDirection, setFlashDirection] = useState<"up" | "down" | null>(null);
+  const previousPrice = useRef<number | null>(null);
+
+  useEffect(() => {
+    const previous = previousPrice.current;
+
+    if (previous == null || price == null) {
+      setDirection(null);
+      setFlashDirection(null);
+      previousPrice.current = price;
+      return undefined;
+    }
+
+    if (price > previous) {
+      setDirection("up");
+      setFlashDirection("up");
+    } else if (price < previous) {
+      setDirection("down");
+      setFlashDirection("down");
+    } else {
+      setFlashDirection(null);
+    }
+
+    previousPrice.current = price;
+
+    if (price !== previous) {
+      const timer = setTimeout(() => setFlashDirection(null), 2500);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [price]);
+
+  return { direction, flashDirection };
+}
+
+function LegRow({
+  leg,
+  showExpiry
+}: {
+  leg: PortfolioPosition["legs"][number];
+  showExpiry: boolean;
+}) {
+  const marketPrice = leg.market_price != null ? Math.abs(leg.market_price) : null;
+  const { direction: priceDirection, flashDirection } = usePriceDirection(marketPrice);
+
+  return (
+    <tr className={flashDirection ? `last-price-${flashDirection}` : undefined}>
+      <td></td>
+      <td colSpan={2} style={{ paddingLeft: "1.5rem", opacity: 0.7, fontSize: "0.85em" }}>
+        {leg.direction} {leg.contracts}x {leg.type}{leg.strike ? ` $${leg.strike}` : ""}
+      </td>
+      <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{fmtPrice(Math.abs(leg.avg_cost) / (leg.type === "Stock" ? 1 : 100))}</td>
+      <td className="right last-price-cell">
+        {marketPrice != null ? fmtPrice(marketPrice) : "—"}
+        {priceDirection === "up" && <ArrowUp size={11} className="price-trend-icon price-trend-up" aria-label="price up" />}
+        {priceDirection === "down" && <ArrowDown size={11} className="price-trend-icon price-trend-down" aria-label="price down" />}
+      </td>
+      <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{fmtPrice(Math.abs(leg.entry_cost))}</td>
+      <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{leg.market_value != null ? fmtUsd(Math.abs(leg.market_value)) : "—"}</td>
+      <td></td>
+      {showExpiry && <td></td>}
+    </tr>
+  );
+}
+
 function PositionRow({ pos, showExpiry = true }: { pos: PortfolioPosition; showExpiry?: boolean }) {
   const mv = resolveMarketValue(pos);
   const entryCost = resolveEntryCost(pos);
@@ -304,10 +376,11 @@ function PositionRow({ pos, showExpiry = true }: { pos: PortfolioPosition; showE
   const pnlPct = pnl != null && entryCost !== 0 ? (pnl / Math.abs(entryCost)) * 100 : null;
   const avgEntry = getAvgEntry(pos);
   const lastPrice = getLastPrice(pos);
+  const { direction: priceDirection, flashDirection } = usePriceDirection(lastPrice);
 
   return (
     <>
-      <tr>
+      <tr className={flashDirection ? `last-price-${flashDirection}` : undefined}>
         <td><strong>{pos.ticker}</strong></td>
         <td>{pos.structure}</td>
         <td>
@@ -316,7 +389,11 @@ function PositionRow({ pos, showExpiry = true }: { pos: PortfolioPosition; showE
           </span>
         </td>
         <td className="right">{fmtPrice(avgEntry)}</td>
-        <td className="right">{lastPrice != null ? fmtPrice(lastPrice) : "—"}</td>
+        <td className="right last-price-cell">
+          {lastPrice != null ? fmtPrice(lastPrice) : "—"}
+          {priceDirection === "up" && <ArrowUp size={11} className="price-trend-icon price-trend-up" aria-label="price up" />}
+          {priceDirection === "down" && <ArrowDown size={11} className="price-trend-icon price-trend-down" aria-label="price down" />}
+        </td>
         <td className="right">{fmtUsd(entryCost)}</td>
         <td className="right">{mv != null ? fmtUsd(mv) : "—"}</td>
         <td className={`right ${pnl != null ? (pnl >= 0 ? "positive" : "negative") : ""}`}>
@@ -325,18 +402,11 @@ function PositionRow({ pos, showExpiry = true }: { pos: PortfolioPosition; showE
         {showExpiry && <td>{pos.expiry !== "N/A" ? pos.expiry : "—"}</td>}
       </tr>
       {pos.legs.length > 1 && pos.legs.map((leg, i) => (
-        <tr key={`${pos.id}-leg-${i}`} className="leg-row">
-          <td></td>
-          <td colSpan={2} style={{ paddingLeft: "1.5rem", opacity: 0.7, fontSize: "0.85em" }}>
-            {leg.direction} {leg.contracts}x {leg.type}{leg.strike ? ` $${leg.strike}` : ""}
-          </td>
-          <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{fmtPrice(Math.abs(leg.avg_cost) / (leg.type === "Stock" ? 1 : 100))}</td>
-          <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{leg.market_price != null ? fmtPrice(Math.abs(leg.market_price)) : "—"}</td>
-          <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{fmtUsd(Math.abs(leg.entry_cost))}</td>
-          <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{leg.market_value != null ? fmtUsd(Math.abs(leg.market_value)) : "—"}</td>
-          <td></td>
-          {showExpiry && <td></td>}
-        </tr>
+        <LegRow
+          key={`${pos.id}-leg-${i}`}
+          leg={leg}
+          showExpiry={showExpiry}
+        />
       ))}
     </>
   );
