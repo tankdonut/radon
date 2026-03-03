@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{TITLE}}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #050505;
+      --bg-panel: #0A0A0A;
+      --bg-hover: #141414;
+      --border-dim: #1C1C1C;
+      --border-focus: #333333;
+      --text-primary: #F0F0F0;
+      --text-muted: #666666;
+      --accent-bg: #FFFFFF;
+      --accent-text: #000000;
+      --positive: #00FF88;
+      --negative: #FF4444;
+      --warning: #FFAA00;
+    }
+    
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        --bg-base: #F5F5F5; --bg-panel: #FFFFFF; --bg-hover: #F0F0F0;
+        --border-dim: #D9D9D9; --border-focus: #A3A3A3;
+        --text-primary: #0A0A0A; --text-muted: #6B6B6B;
+        --accent-bg: #000000; --accent-text: #FFFFFF;
+        --positive: #00AA55; --negative: #DD2222; --warning: #CC8800;
+      }
+    }
+    [data-theme="light"] {
+      --bg-base: #F5F5F5; --bg-panel: #FFFFFF; --bg-hover: #F0F0F0;
+      --border-dim: #D9D9D9; --border-focus: #A3A3A3;
+      --text-primary: #0A0A0A; --text-muted: #6B6B6B;
+      --accent-bg: #000000; --accent-text: #FFFFFF;
+      --positive: #00AA55; --negative: #DD2222; --warning: #CC8800;
+    }
+    [data-theme="dark"] {
+      --bg-base: #050505; --bg-panel: #0A0A0A; --bg-hover: #141414;
+      --border-dim: #1C1C1C; --border-focus: #333333;
+      --text-primary: #F0F0F0; --text-muted: #666666;
+      --accent-bg: #FFFFFF; --accent-text: #000000;
+      --positive: #00FF88; --negative: #FF4444; --warning: #FFAA00;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.5; background: var(--bg-base); color: var(--text-primary); }
+    .container { max-width: 900px; margin: 0 auto; padding: 24px; }
+    .header { border-bottom: 1px solid var(--border-dim); padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+    .title { font-size: 14px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; }
+    .subtitle { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+    .header-actions { display: flex; align-items: center; gap: 16px; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1px; background: var(--border-dim); border: 1px solid var(--border-dim); margin-bottom: 24px; }
+    .metric { background: var(--bg-panel); padding: 20px; }
+    .metric-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--text-muted); margin-bottom: 8px; }
+    .metric-value { font-size: 28px; font-weight: 500; letter-spacing: -0.02em; }
+    .metric-change { font-size: 11px; color: var(--text-muted); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-dim); }
+    .panel { background: var(--bg-panel); border: 1px solid var(--border-dim); margin-bottom: 16px; }
+    .panel-header { padding: 12px 16px; border-bottom: 1px solid var(--border-dim); font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.15em; color: var(--text-muted); }
+    .panel-body { padding: 16px; }
+    .panel-accent { border: 2px solid var(--positive); }
+    .panel-accent.negative { border-color: var(--negative); }
+    table { width: 100%; border-collapse: collapse; }
+    th { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.15em; color: var(--text-muted); text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--border-dim); }
+    td { padding: 12px 16px; border-bottom: 1px solid var(--border-dim); }
+    tr:hover { background: var(--bg-hover); }
+    tr.subtotal { background: var(--bg-hover); }
+    tr.total { background: var(--bg-hover); font-size: 16px; }
+    .text-right { text-align: right; }
+    .text-positive { color: var(--positive); }
+    .text-negative { color: var(--negative); }
+    .text-muted { color: var(--text-muted); }
+    .pill { display: inline-block; padding: 2px 8px; border: 1px solid var(--border-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; }
+    .pill-positive { background: var(--positive); color: #000; border-color: var(--positive); }
+    .pill-negative { background: var(--negative); color: #FFF; border-color: var(--negative); }
+    .pill-warning { background: var(--warning); color: #000; border-color: var(--warning); }
+    .callout { background: var(--bg-hover); border-left: 3px solid var(--accent-bg); padding: 16px; margin: 16px 0; }
+    .callout.positive { border-left-color: var(--positive); }
+    .callout.negative { border-left-color: var(--negative); }
+    .callout-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--text-muted); margin-bottom: 8px; }
+    .theme-toggle { background: transparent; border: 1px solid var(--border-dim); color: var(--text-primary); padding: 4px 12px; font-family: inherit; font-size: 11px; cursor: pointer; }
+    .theme-toggle:hover { background: var(--bg-hover); border-color: var(--border-focus); }
+    .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border-dim); color: var(--text-muted); font-size: 11px; }
+    .timeline { position: relative; padding-left: 24px; }
+    .timeline::before { content: ''; position: absolute; left: 6px; top: 0; bottom: 0; width: 2px; background: var(--border-dim); }
+    .timeline-item { position: relative; padding: 12px 0; }
+    .timeline-item::before { content: ''; position: absolute; left: -21px; top: 16px; width: 10px; height: 10px; background: var(--bg-panel); border: 2px solid var(--border-focus); }
+    .timeline-item.buy::before { border-color: var(--positive); background: var(--positive); }
+    .timeline-item.sell::before { border-color: var(--negative); background: var(--negative); }
+    .timeline-date { font-size: 11px; color: var(--text-muted); }
+    .timeline-action { font-weight: 500; margin: 4px 0; }
+    .timeline-detail { font-size: 12px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    {{BODY}}
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme');
+      if (current) html.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+      else html.setAttribute('data-theme', window.matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark');
+    }
+  </script>
+</body>
+</html>

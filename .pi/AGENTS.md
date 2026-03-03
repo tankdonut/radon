@@ -26,6 +26,7 @@ When fetching ANY market data (quotes, options, fundamentals, analyst ratings, e
 | `journal` | View recent trade log entries |
 | `sync` | Pull live portfolio from Interactive Brokers |
 | `blotter` | Trade blotter - today's fills, P&L, spread grouping |
+| `blotter-history` | Historical trades via Flex Query (requires setup) |
 | `leap-scan [TICKERS]` | Scan for LEAP IV mispricing opportunities |
 | `seasonal [TICKERS]` | Seasonality assessment for one or more tickers |
 | `x-scan [@ACCOUNT]` | Fetch latest tweets and extract ticker sentiment |
@@ -307,6 +308,83 @@ python3 scripts/trade_blotter/test_integration.py
 
 ---
 
+## Flex Query Setup (Historical Trades)
+
+The real-time IB API only provides **today's fills**. To calculate P&L for positions opened/closed on previous days, you need to set up IB Flex Query for historical data.
+
+### One-Time Setup
+
+**Step 1: Login to IB Account Management**
+```
+https://www.interactivebrokers.com/sso/Login
+```
+
+**Step 2: Create a Flex Query**
+1. Navigate to: **Reports → Flex Queries**
+2. Click **"+ Create"** under "Activity Flex Query"
+3. Configure:
+
+| Field | Value |
+|-------|-------|
+| Query Name | `Trade History` |
+| **Sections** | ☑️ Trades, ☑️ Commission Details |
+| Format | `XML` |
+| Period | `Last 365 Calendar Days` |
+| Breakout by Day | `Yes` |
+
+4. Click **Continue**
+5. In Trades section, select **ALL fields** (or at minimum: Symbol, DateTime, Buy/Sell, Quantity, TradePrice, Commission, Strike, Expiry, Put/Call, TradeID)
+6. Click **Save**
+7. Note the **Query ID** displayed (e.g., `1422766`)
+
+**Step 3: Get Flex Web Service Token**
+1. Navigate to: **Reports → Settings → Flex Web Service**
+2. Click **Generate Token**
+3. Note the token string
+
+**Step 4: Configure Environment**
+Add to your `~/.zshrc` or `~/.bashrc`:
+```bash
+export IB_FLEX_TOKEN="your_token_here"
+export IB_FLEX_QUERY_ID="your_query_id_here"
+```
+
+Then reload:
+```bash
+source ~/.zshrc
+```
+
+### Usage
+
+```bash
+# Fetch all historical trades
+python3 scripts/trade_blotter/flex_query.py
+
+# Filter by symbol
+python3 scripts/trade_blotter/flex_query.py --symbol EWY
+
+# JSON output
+python3 scripts/trade_blotter/flex_query.py --json
+
+# Pass credentials directly (if not using env vars)
+python3 scripts/trade_blotter/flex_query.py --token YOUR_TOKEN --query-id YOUR_QUERY_ID
+
+# Show setup guide
+python3 scripts/trade_blotter/flex_query.py --setup
+```
+
+### What Flex Query Provides
+
+| Data | Real-time API | Flex Query |
+|------|---------------|------------|
+| Today's fills | ✅ | ✅ |
+| Historical fills (1-365 days) | ❌ | ✅ |
+| Commission details | ✅ | ✅ |
+| Open/Close indicator | ❌ | ✅ |
+| Trade ID for reconciliation | ✅ | ✅ |
+
+---
+
 ## Output Format
 
 - Always show: signal → structure → Kelly math → decision
@@ -315,6 +393,40 @@ python3 scripts/trade_blotter/test_integration.py
 - Never rationalize a bad trade
 - Log EXECUTED trades to trade_log.json
 - Log NO_TRADE decisions to docs/status.md (Recent Evaluations section)
+
+## P&L Reports
+
+**When generating any P&L report, ALWAYS use the P&L template:**
+
+```bash
+# Template location
+.pi/skills/html-report/pnl-template.html
+
+# Output location
+reports/pnl-{TICKER}-{DATE}.html
+```
+
+**Required sections for every P&L report:**
+1. Header with CLOSED/OPEN status pill
+2. 4 metrics: Realized P&L, Commissions, Hold Period, Return on Risk
+3. Trade Summary callout (strategy, thesis, outcome)
+4. Execution table(s) with cash flows per leg
+5. Combined P&L panel (for spreads)
+6. Trade timeline
+7. Footer with data source
+
+**Return on Risk formula:**
+```
+Return on Risk = Realized P&L / Capital at Risk
+
+Capital at Risk:
+  - Debit spread: Net debit paid
+  - Credit spread: Max loss (width - credit)
+  - Long option: Premium paid
+  - Stock: Cost basis
+```
+
+See `.pi/skills/html-report/SKILL.md` for full template documentation.
 
 ## Scripts
 
@@ -328,7 +440,8 @@ python3 scripts/trade_blotter/test_integration.py
 | `scripts/discover.py` | Market-wide flow scanner for new candidates |
 | `scripts/kelly.py` | Kelly criterion calculator |
 | `scripts/ib_sync.py` | Sync live portfolio from Interactive Brokers (periodic) |
-| `scripts/blotter.py` | Trade blotter - reconcile fills, calculate P&L |
+| `scripts/blotter.py` | Trade blotter - reconcile today's fills, calculate P&L |
+| `scripts/trade_blotter/flex_query.py` | Fetch historical trades via IB Flex Query (up to 365 days) |
 | `scripts/ib_realtime_server.js` | Node.js WebSocket server for real-time IB price streaming |
 | `scripts/test_ib_realtime.py` | Tests for IB real-time connectivity |
 | `scripts/leap_iv_scanner.py` | LEAP IV mispricing scanner (IB connection required) |
