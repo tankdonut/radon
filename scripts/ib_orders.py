@@ -69,6 +69,8 @@ def format_contract(contract) -> str:
     elif sec_type == "FUT":
         expiry = getattr(contract, "lastTradeDateOrContractMonth", "")
         return f"{symbol} {expiry}"
+    elif sec_type == "BAG":
+        return f"{symbol} Spread"
     else:
         return f"{symbol} ({sec_type})"
 

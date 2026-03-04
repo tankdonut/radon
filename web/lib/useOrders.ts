@@ -61,8 +61,8 @@ export function useOrders(active: boolean): UseOrdersReturn {
         setError(null);
         setLoading(false);
 
-        // No cached data — trigger immediate sync
-        if (!json.last_sync && !didInitialSync.current) {
+        // Always sync fresh from IB on first load
+        if (!didInitialSync.current) {
           didInitialSync.current = true;
           void triggerSync();
         }
