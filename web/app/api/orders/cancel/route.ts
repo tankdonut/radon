@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import type { OrdersData } from "@/lib/types";
+import { createSyncMutex } from "@/lib/syncMutex";
 
 export const runtime = "nodejs";
 
@@ -64,7 +65,7 @@ const runScript = (
   });
 };
 
-const runSync = (root: string): Promise<void> => {
+const runSync = (root: string): Promise<{ ok: boolean; stderr: string }> => {
   return new Promise((resolve) => {
     const scriptPath = path.join("scripts", "ib_orders.py");
     const proc = spawn("python3", [scriptPath, "--sync", "--port", "4001", "--client-id", "11"], {
@@ -72,9 +73,11 @@ const runSync = (root: string): Promise<void> => {
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    let stderr = "";
+    proc.stderr?.on("data", (chunk) => { stderr += chunk.toString(); });
     const timer = setTimeout(() => proc.kill("SIGKILL"), 30_000);
-    proc.on("close", () => { clearTimeout(timer); resolve(); });
-    proc.on("error", () => { clearTimeout(timer); resolve(); });
+    proc.on("close", (code) => { clearTimeout(timer); resolve({ ok: code === 0, stderr }); });
+    proc.on("error", () => { clearTimeout(timer); resolve({ ok: false, stderr: "Failed to spawn ib_orders.py" }); });
   });
 };
 
@@ -116,7 +119,8 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     // Refresh orders after cancel
-    await runSync(root);
+    const syncMutex = createSyncMutex(() => runSync(root));
+    await syncMutex();
     const orders = await readOrders(root);
 
     return NextResponse.json({

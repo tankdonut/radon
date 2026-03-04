@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import type { OrdersData } from "@/lib/types";
+import { createSyncMutex } from "@/lib/syncMutex";
 
 export const runtime = "nodejs";
 
@@ -85,10 +86,11 @@ export async function GET(): Promise<Response> {
   }
 }
 
+const syncMutex = createSyncMutex(() => runSync(resolveProjectRoot()));
+
 export async function POST(): Promise<Response> {
   try {
-    const root = resolveProjectRoot();
-    const result = await runSync(root);
+    const result = await syncMutex();
 
     if (!result.ok) {
       return NextResponse.json(
