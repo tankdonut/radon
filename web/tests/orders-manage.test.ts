@@ -334,11 +334,11 @@ describe("Pending cancel state logic", () => {
     assert.ok(!stillOpen, "Should NOT match different order just because both have orderId=0");
   });
 
-  it("should respect max poll count of 15", () => {
-    const CANCEL_POLL_MAX = 15;
-    const CANCEL_POLL_MS = 2_000;
+  it("should respect max poll count of 24 (~2 min)", () => {
+    const CANCEL_POLL_MAX = 24;
+    const CANCEL_POLL_MS = 5_000;
 
-    assert.equal(CANCEL_POLL_MAX * CANCEL_POLL_MS, 30_000, "Max wait is ~30 seconds");
+    assert.equal(CANCEL_POLL_MAX * CANCEL_POLL_MS, 120_000, "Max wait is ~2 minutes");
   });
 
   it("canModify returns true only for LMT and STP LMT", () => {

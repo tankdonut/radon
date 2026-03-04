@@ -811,8 +811,8 @@ type CancelledOrder = {
   cancelledAt: string; // ISO timestamp
 };
 
-const CANCEL_POLL_MS = 2_000;
-const CANCEL_POLL_MAX = 15; // max polls before giving up (~30s)
+const CANCEL_POLL_MS = 5_000;
+const CANCEL_POLL_MAX = 24; // max polls before giving up (~2 min)
 
 function OrdersSections({
   orders,
@@ -851,7 +851,8 @@ function OrdersSections({
       pollCountsRef.current.set(permId, count);
 
       try {
-        const res = await fetch("/api/orders");
+        // POST triggers a fresh IB sync (GET just reads stale cached file)
+        const res = await fetch("/api/orders", { method: "POST" });
         if (!res.ok) return;
         const data = (await res.json()) as OrdersData;
 
@@ -889,7 +890,7 @@ function OrdersSections({
           onOrdersUpdate?.(data);
           addToast?.("success", `${order.symbol} order cancelled`);
         } else if (count >= CANCEL_POLL_MAX) {
-          // Timed out — stop polling, keep pending state but warn
+          // Timed out after ~2 min — clear pending state, show error, prompt retry
           clearInterval(interval);
           pollTimersRef.current.delete(permId);
           pollCountsRef.current.delete(permId);
@@ -898,8 +899,8 @@ function OrdersSections({
             next.delete(permId);
             return next;
           });
-          addToast?.("warning", `${order.symbol} cancel still pending — sync manually`);
           onOrdersUpdate?.(data);
+          addToast?.("error", `${order.symbol} cancellation failed — order still open. Try cancelling again.`, 0);
         } else {
           // Still open, update data to reflect any status changes
           onOrdersUpdate?.(data);
