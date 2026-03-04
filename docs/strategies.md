@@ -2,12 +2,15 @@
 
 ## Overview
 
-The Convex Scavenger employs two primary edge-detection strategies, both focused on exploiting informational or structural advantages that institutional players leave behind.
+The Convex Scavenger employs three edge-detection strategies, each exploiting informational or structural advantages that institutional players leave behind.
 
 | Strategy | Edge Source | Instrument | Timeframe | Risk Profile |
 |----------|-------------|------------|-----------|--------------|
 | **Dark Pool Flow** | Institutional positioning | ATM/OTM options | 2-6 weeks | Defined (long options) |
 | **LEAP IV Mispricing** | Volatility regime change | Long-dated calls | 1-3 years | Defined (long options) |
+| **GARCH Convergence** | Cross-asset repricing lag | Medium-dated options | 2-8 weeks | Defined (long options/spreads) |
+
+See also: [`strategy-garch-convergence.md`](strategy-garch-convergence.md) for the full GARCH Convergence Spreads specification.
 
 ---
 

@@ -132,6 +132,7 @@ python3 scripts/free_trade_analyzer.py --json
 
 | `blotter-history` | Historical trades via Flex Query (requires setup) |
 | `leap-scan [TICKERS]` | Scan for LEAP IV mispricing opportunities |
+| `garch-convergence [TICKERS]` | Cross-asset GARCH vol divergence scan |
 | `seasonal [TICKERS]` | Seasonality assessment for one or more tickers |
 | `x-scan [@ACCOUNT]` | Fetch tweets via xAI API (recommended, slower) |
 | `x-scan-browser [@ACCOUNT]` | Fetch tweets via browser scraping (faster, lower quality) |
@@ -1052,7 +1053,8 @@ See `docs/strategies.md` for full methodology.
 | `docs/plans.md` | Milestone workflow with validation steps |
 | `docs/implement.md` | Execution runbook |
 | `docs/status.md` | Current state, recent decisions, audit log |
-| `docs/strategies.md` | Trading strategies (Dark Pool Flow, LEAP IV Mispricing) |
+| `docs/strategies.md` | Trading strategies (Dark Pool Flow, LEAP IV Mispricing, GARCH Convergence) |
+| `docs/strategy-garch-convergence.md` | GARCH Convergence Spreads full specification |
 | `docs/unusual_whales_api.md` | **Unusual Whales API quick reference** |
 | `docs/unusual_whales_api_spec.yaml` | **Full OpenAPI spec for UW API** |
 

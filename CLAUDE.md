@@ -74,6 +74,7 @@ TZ=America/New_York date +"%A %H:%M"   # Check if market open (9:30–16:00 ET, 
 | `blotter` | Today's fills + P&L |
 | `blotter-history` | Historical trades via Flex Query |
 | `leap-scan [TICKERS]` | LEAP IV mispricing opportunities |
+| `garch-convergence [TICKERS]` | Cross-asset GARCH vol divergence scan |
 | `seasonal [TICKERS]` | Monthly seasonality assessment |
 | `x-scan [@ACCOUNT]` | Extract ticker sentiment from X posts |
 | `analyst-ratings [TICKERS]` | Ratings, changes, price targets |
