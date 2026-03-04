@@ -1,7 +1,7 @@
 """Tests for fetch_flow.py — dark pool + options flow analysis."""
 import pytest
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from fetch_flow import (
     is_market_open,
@@ -76,7 +76,7 @@ class TestAnalyzeDarkpool:
         assert result["total_volume"] == 0
 
     def test_strong_buy_accumulation(self):
-        # All trades above midpoint → buy volume
+        # All trades above midpoint -> buy volume
         trades = [
             {"size": "1000", "price": "51", "premium": "51000",
              "nbbo_bid": "49", "nbbo_ask": "51"},
@@ -89,7 +89,7 @@ class TestAnalyzeDarkpool:
         assert result["flow_strength"] == 100.0
 
     def test_strong_sell_distribution(self):
-        # All trades below midpoint → sell volume
+        # All trades below midpoint -> sell volume
         trades = [
             {"size": "1000", "price": "49", "premium": "49000",
              "nbbo_bid": "49", "nbbo_ask": "51"},
@@ -102,7 +102,7 @@ class TestAnalyzeDarkpool:
         assert result["flow_strength"] == 100.0
 
     def test_balanced_neutral(self):
-        # Equal buy/sell → NEUTRAL
+        # Equal buy/sell -> NEUTRAL
         trades = [
             {"size": "1000", "price": "51", "premium": "51000",
              "nbbo_bid": "49", "nbbo_ask": "51"},
@@ -206,20 +206,28 @@ class TestAnalyzeOptionsFlow:
 class TestFetchFlowCombinedSignal:
     """Test the combined signal logic from fetch_flow() by mocking I/O."""
 
+    @patch("fetch_flow.UWClient")
     @patch("fetch_flow.fetch_flow_alerts", return_value=[])
     @patch("fetch_flow.fetch_darkpool", return_value=[])
     @patch("fetch_flow.get_last_n_trading_days", return_value=["2026-03-02"])
-    def test_no_data_no_signal(self, mock_days, mock_dp, mock_flow):
+    def test_no_data_no_signal(self, mock_days, mock_dp, mock_flow, MockUWClient):
+        mock_client = MagicMock()
+        MockUWClient.return_value.__enter__ = MagicMock(return_value=mock_client)
+        MockUWClient.return_value.__exit__ = MagicMock(return_value=False)
         from fetch_flow import fetch_flow
         result = fetch_flow("AAPL", lookback_days=1)
         assert result["combined_signal"] == "NO_SIGNAL"
 
+    @patch("fetch_flow.UWClient")
     @patch("fetch_flow.fetch_flow_alerts")
     @patch("fetch_flow.fetch_darkpool")
     @patch("fetch_flow.get_last_n_trading_days", return_value=["2026-03-02"])
-    def test_bullish_confluence(self, mock_days, mock_dp, mock_flow):
+    def test_bullish_confluence(self, mock_days, mock_dp, mock_flow, MockUWClient):
+        mock_client = MagicMock()
+        MockUWClient.return_value.__enter__ = MagicMock(return_value=mock_client)
+        MockUWClient.return_value.__exit__ = MagicMock(return_value=False)
         from fetch_flow import fetch_flow
-        # DP: strong buy → ACCUMULATION
+        # DP: strong buy -> ACCUMULATION
         mock_dp.return_value = [
             {"size": "5000", "price": "51", "premium": "255000",
              "nbbo_bid": "49", "nbbo_ask": "51"},
@@ -232,10 +240,14 @@ class TestFetchFlowCombinedSignal:
         result = fetch_flow("AAPL", lookback_days=1)
         assert result["combined_signal"] == "STRONG_BULLISH_CONFLUENCE"
 
+    @patch("fetch_flow.UWClient")
     @patch("fetch_flow.fetch_flow_alerts")
     @patch("fetch_flow.fetch_darkpool")
     @patch("fetch_flow.get_last_n_trading_days", return_value=["2026-03-02"])
-    def test_dp_only_signal(self, mock_days, mock_dp, mock_flow):
+    def test_dp_only_signal(self, mock_days, mock_dp, mock_flow, MockUWClient):
+        mock_client = MagicMock()
+        MockUWClient.return_value.__enter__ = MagicMock(return_value=mock_client)
+        MockUWClient.return_value.__exit__ = MagicMock(return_value=False)
         from fetch_flow import fetch_flow
         mock_dp.return_value = [
             {"size": "5000", "price": "51", "premium": "255000",

@@ -49,7 +49,7 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 from dataclasses import dataclass, field, asdict
 
-from utils.uw_api import uw_api_get
+from clients.uw_client import UWClient, UWAPIError
 
 # Preset ticker groups
 PRESETS = {
@@ -282,23 +282,40 @@ def get_vol_data(ticker: str) -> Optional[VolData]:
     )
 
 
-def get_current_iv(ticker: str) -> tuple:
+def get_current_iv(ticker: str, _client: UWClient = None) -> tuple:
     """Get current IV and IV rank from UW."""
-    data = uw_api_get(f"/stock/{ticker}/iv-rank")
-    
-    if 'data' in data and data['data']:
-        latest = data['data'][0]
-        iv = float(latest.get('volatility', 0)) * 100
-        rank = float(latest.get('iv_rank_1y', 0))
-        return iv, rank
-    
-    return 0, 0
+    def _fetch(client):
+        try:
+            data = client.get_iv_rank(ticker)
+        except UWAPIError:
+            return 0, 0
+        if 'data' in data and data['data']:
+            latest = data['data'][0]
+            iv = float(latest.get('volatility', 0)) * 100
+            rank = float(latest.get('iv_rank_1y', 0))
+            return iv, rank
+        return 0, 0
+
+    if _client is not None:
+        return _fetch(_client)
+    with UWClient() as client:
+        return _fetch(client)
 
 
-def get_leap_options(ticker: str, min_year: int = 2027) -> List[LeapOption]:
+def get_leap_options(ticker: str, min_year: int = 2027, _client: UWClient = None) -> List[LeapOption]:
     """Get LEAP call options from UW."""
-    data = uw_api_get(f"/stock/{ticker}/option-contracts")
-    
+    def _fetch(client):
+        try:
+            return client.get_option_contracts(ticker)
+        except UWAPIError:
+            return {}
+
+    if _client is not None:
+        data = _fetch(_client)
+    else:
+        with UWClient() as client:
+            data = _fetch(client)
+
     if 'data' not in data:
         return []
     
@@ -382,22 +399,22 @@ def scan_ticker(ticker: str, min_gap: float) -> Optional[ScanResult]:
     print(f"\n{'='*50}")
     print(f"Scanning {ticker}")
     print(f"{'='*50}")
-    
+
     # Get historical volatility
     vol_data = get_vol_data(ticker)
     if not vol_data:
         return None
-    
+
     print(f"  Price: ${vol_data.price:.2f}")
     print(f"  HV20: {vol_data.hv_20:.1f}% | HV60: {vol_data.hv_60:.1f}% | HV252: {vol_data.hv_252:.1f}%")
     print(f"  Avg HV: {vol_data.avg_hv:.1f}%")
-    
-    # Get current IV
-    current_iv, iv_rank = get_current_iv(ticker)
-    print(f"  Current IV: {current_iv:.1f}% | IV Rank: {iv_rank:.1f}")
-    
-    # Get LEAP options
-    leaps = get_leap_options(ticker)
+
+    # Get current IV and LEAP options using shared client
+    with UWClient() as client:
+        current_iv, iv_rank = get_current_iv(ticker, _client=client)
+        print(f"  Current IV: {current_iv:.1f}% | IV Rank: {iv_rank:.1f}")
+
+        leaps = get_leap_options(ticker, _client=client)
     if not leaps:
         print(f"  ⚠ No LEAP options found")
         return None

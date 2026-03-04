@@ -217,9 +217,9 @@ class TestClientIds:
     def test_registry_has_all_entries(self):
         from utils.ib_connection import CLIENT_IDS
         expected_keys = {
-            "ib_order_manage", "ib_sync", "ib_order", "ib_orders", 
-            "ib_fill_monitor", "exit_order_service", "ib_reconcile", 
-            "fetch_analyst_ratings", "ib_realtime_server"
+            "ib_order_manage", "ib_sync", "ib_order", "ib_orders",
+            "ib_execute", "ib_fill_monitor", "exit_order_service",
+            "ib_reconcile", "fetch_analyst_ratings", "ib_realtime_server"
         }
         assert set(CLIENT_IDS.keys()) == expected_keys
 
@@ -236,7 +236,6 @@ class TestClientIds:
         # These scripts need master client for cancel/modify operations
         assert "ib_order_manage" in master_scripts
         assert "ib_sync" in master_scripts
-        assert "ib_orders" in master_scripts
         assert "ib_reconcile" in master_scripts
 
     def test_specific_ids(self):
@@ -244,10 +243,11 @@ class TestClientIds:
         # Master client (0) for full order control
         assert CLIENT_IDS["ib_order_manage"] == 0
         assert CLIENT_IDS["ib_sync"] == 0
-        assert CLIENT_IDS["ib_orders"] == 0
         assert CLIENT_IDS["ib_reconcile"] == 0
-        # Unique IDs for concurrent/long-running services
+        # Dedicated IDs for concurrent connections
+        assert CLIENT_IDS["ib_orders"] == 11
         assert CLIENT_IDS["ib_order"] == 2
+        assert CLIENT_IDS["ib_execute"] == 25
         assert CLIENT_IDS["ib_fill_monitor"] == 52
         assert CLIENT_IDS["exit_order_service"] == 60
         assert CLIENT_IDS["fetch_analyst_ratings"] == 99

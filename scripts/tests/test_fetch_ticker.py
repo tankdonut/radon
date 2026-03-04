@@ -4,6 +4,8 @@ import pytest
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 
+from clients.uw_client import UWNotFoundError, UWAPIError
+
 from fetch_ticker import (
     is_market_open,
     get_last_n_trading_days,
@@ -74,67 +76,66 @@ class TestMarketCalendar:
 # ── fetch_ticker_info ───────────────────────────────────────────────
 
 class TestFetchTickerInfo:
-    @patch("fetch_ticker.uw_api_get")
+    @patch("fetch_ticker.UWClient")
     @patch("fetch_ticker.get_cached_ticker", return_value=None)
-    def test_ticker_not_found_404(self, mock_cache, mock_api):
-        mock_api.return_value = {"error": "HTTP 404: Not Found"}
+    def test_ticker_not_found_404(self, mock_cache, MockUWClient):
+        mock_client = MagicMock()
+        MockUWClient.return_value.__enter__ = MagicMock(return_value=mock_client)
+        MockUWClient.return_value.__exit__ = MagicMock(return_value=False)
+        mock_client.get_darkpool_flow.side_effect = UWNotFoundError("Not Found", status_code=404)
         result = fetch_ticker_info("FAKE")
         assert result["verified"] is False
         assert "not found" in result["error"].lower()
 
-    @patch("fetch_ticker.uw_api_get")
+    @patch("fetch_ticker.UWClient")
     @patch("fetch_ticker.get_cached_ticker", return_value=None)
-    def test_valid_ticker_with_dp_data(self, mock_cache, mock_api):
-        def side_effect(path, params=None):
-            if "/darkpool/" in path:
-                return {"data": [
-                    {"size": "1000", "price": "150", "premium": "150000", "canceled": False},
-                ]}
-            if "/option-trades/" in path:
-                return {"data": [{"id": 1}]}
-            return {}
-
-        mock_api.side_effect = side_effect
+    def test_valid_ticker_with_dp_data(self, mock_cache, MockUWClient):
+        mock_client = MagicMock()
+        MockUWClient.return_value.__enter__ = MagicMock(return_value=mock_client)
+        MockUWClient.return_value.__exit__ = MagicMock(return_value=False)
+        mock_client.get_darkpool_flow.return_value = {"data": [
+            {"size": "1000", "price": "150", "premium": "150000", "canceled": False},
+        ]}
+        mock_client.get_flow_alerts.return_value = {"data": [{"id": 1}]}
         result = fetch_ticker_info("AAPL")
         assert result["verified"] is True
         assert result["current_price"] == 150.0
         assert result["options_available"] is True
 
-    @patch("fetch_ticker.uw_api_get")
+    @patch("fetch_ticker.UWClient")
     @patch("fetch_ticker.get_cached_ticker", return_value=None)
-    def test_no_dp_activity(self, mock_cache, mock_api):
-        mock_api.return_value = {"data": []}
+    def test_no_dp_activity(self, mock_cache, MockUWClient):
+        mock_client = MagicMock()
+        MockUWClient.return_value.__enter__ = MagicMock(return_value=mock_client)
+        MockUWClient.return_value.__exit__ = MagicMock(return_value=False)
+        mock_client.get_darkpool_flow.return_value = {"data": []}
         result = fetch_ticker_info("ILLIQUID")
         assert result["verified"] is False
         assert "No dark pool activity" in result["error"]
 
-    @patch("fetch_ticker.uw_api_get")
+    @patch("fetch_ticker.UWClient")
     @patch("fetch_ticker.get_cached_ticker", return_value=None)
-    def test_liquidity_low(self, mock_cache, mock_api):
-        # 3 trading days, 5000 total volume → avg < 10000
+    def test_liquidity_low(self, mock_cache, MockUWClient):
+        mock_client = MagicMock()
+        MockUWClient.return_value.__enter__ = MagicMock(return_value=mock_client)
+        MockUWClient.return_value.__exit__ = MagicMock(return_value=False)
+        # 3 trading days, 5000 total volume -> avg < 10000
         trades = [{"size": "5000", "price": "10", "premium": "50000", "canceled": False}]
-
-        def side_effect(path, params=None):
-            if "/darkpool/" in path:
-                return {"data": trades}
-            return {"data": []}
-
-        mock_api.side_effect = side_effect
+        mock_client.get_darkpool_flow.return_value = {"data": trades}
+        mock_client.get_flow_alerts.return_value = {"data": []}
         result = fetch_ticker_info("ILLIQ")
         assert result["verified"] is True
         assert "LOW" in result.get("liquidity_warning", "")
 
-    @patch("fetch_ticker.uw_api_get")
+    @patch("fetch_ticker.UWClient")
     @patch("fetch_ticker.get_cached_ticker", return_value=None)
-    def test_liquidity_high(self, mock_cache, mock_api):
+    def test_liquidity_high(self, mock_cache, MockUWClient):
+        mock_client = MagicMock()
+        MockUWClient.return_value.__enter__ = MagicMock(return_value=mock_client)
+        MockUWClient.return_value.__exit__ = MagicMock(return_value=False)
         trades = [{"size": "500000", "price": "100", "premium": "50000000", "canceled": False}]
-
-        def side_effect(path, params=None):
-            if "/darkpool/" in path:
-                return {"data": trades}
-            return {"data": []}
-
-        mock_api.side_effect = side_effect
+        mock_client.get_darkpool_flow.return_value = {"data": trades}
+        mock_client.get_flow_alerts.return_value = {"data": []}
         result = fetch_ticker_info("SPY")
         assert result["verified"] is True
         assert result.get("liquidity_warning") is None

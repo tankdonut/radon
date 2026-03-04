@@ -15,7 +15,7 @@ import argparse, json, sys
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from utils.uw_api import uw_api_get
+from clients.uw_client import UWClient, UWAPIError
 from utils.market_calendar import (
     get_last_n_trading_days,
     load_holidays,
@@ -34,32 +34,44 @@ def is_market_open(date: datetime) -> bool:
     return _is_trading_day(date)
 
 
-def fetch_darkpool(ticker: str, date: Optional[str] = None) -> List[Dict]:
+def fetch_darkpool(ticker: str, date: Optional[str] = None, _client: Optional[UWClient] = None) -> List[Dict]:
     """Fetch dark pool trade prints for a ticker.
 
     Returns list of individual dark pool transactions with price, size,
     NBBO context, and premium.
     """
-    params = {}
-    if date:
-        params["date"] = date
-    resp = uw_api_get(f"darkpool/{ticker}", params=params)
-    return resp.get("data", [])
+    def _fetch(client):
+        try:
+            resp = client.get_darkpool_flow(ticker, date=date)
+            return resp.get("data", [])
+        except UWAPIError:
+            return []
+
+    if _client is not None:
+        return _fetch(_client)
+    with UWClient() as client:
+        return _fetch(client)
 
 
-def fetch_flow_alerts(ticker: str, min_premium: int = 50000) -> List[Dict]:
+def fetch_flow_alerts(
+    ticker: str, min_premium: int = 50000, _client: Optional[UWClient] = None
+) -> List[Dict]:
     """Fetch options flow alerts for a ticker.
 
     Filters for larger trades (default $50k+ premium) that are more likely
     to represent institutional activity.
     """
-    params = {
-        "ticker_symbol": ticker,
-        "min_premium": str(min_premium),
-        "limit": "100",
-    }
-    resp = uw_api_get("option-trades/flow-alerts", params=params)
-    return resp.get("data", [])
+    def _fetch(client):
+        try:
+            resp = client.get_flow_alerts(ticker=ticker, min_premium=min_premium, limit=100)
+            return resp.get("data", [])
+        except UWAPIError:
+            return []
+
+    if _client is not None:
+        return _fetch(_client)
+    with UWClient() as client:
+        return _fetch(client)
 
 
 def analyze_darkpool(trades: List[Dict]) -> Dict:
@@ -196,22 +208,23 @@ def fetch_flow(ticker: str, lookback_days: int = 5) -> Dict:
     all_dp_trades = []
     daily_signals = []
     today = datetime.now()
-    
+
     trading_days = get_last_n_trading_days(lookback_days, today)
 
-    for date in trading_days:
-        trades = fetch_darkpool(ticker, date)
-        if isinstance(trades, list):
-            day_analysis = analyze_darkpool(trades)
-            day_analysis["date"] = date
-            daily_signals.append(day_analysis)
-            all_dp_trades.extend(trades)
+    with UWClient() as client:
+        for date in trading_days:
+            trades = fetch_darkpool(ticker, date, _client=client)
+            if isinstance(trades, list):
+                day_analysis = analyze_darkpool(trades)
+                day_analysis["date"] = date
+                daily_signals.append(day_analysis)
+                all_dp_trades.extend(trades)
 
-    # Aggregate dark pool analysis
-    aggregate_dp = analyze_darkpool(all_dp_trades)
+        # Aggregate dark pool analysis
+        aggregate_dp = analyze_darkpool(all_dp_trades)
 
-    # Fetch options flow
-    flow_alerts = fetch_flow_alerts(ticker)
+        # Fetch options flow
+        flow_alerts = fetch_flow_alerts(ticker, _client=client)
     options_summary = analyze_options_flow(flow_alerts if isinstance(flow_alerts, list) else [])
 
     # Combined signal

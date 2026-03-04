@@ -168,18 +168,35 @@ def classify_position(legs: list) -> tuple[str, Optional[Leg], Optional[Leg]]:
     if len(legs) == 2:
         leg1, leg2 = legs
         
-        # Risk Reversal: Long Call + Short Put OR Long Put + Short Call
+        # Check for Call + Put combinations
+        call_leg = None
+        put_leg = None
         if leg1.leg_type == "Call" and leg2.leg_type == "Put":
-            if leg1.direction == "LONG" and leg2.direction == "SHORT":
-                return ("risk_reversal_bullish", leg1, leg2)  # Core: Call, Hedge: Put
-            elif leg1.direction == "SHORT" and leg2.direction == "LONG":
-                return ("risk_reversal_bearish", leg2, leg1)  # Core: Put, Hedge: Call
+            call_leg, put_leg = leg1, leg2
+        elif leg1.leg_type == "Put" and leg2.leg_type == "Call":
+            put_leg, call_leg = leg1, leg2
         
-        if leg1.leg_type == "Put" and leg2.leg_type == "Call":
-            if leg1.direction == "LONG" and leg2.direction == "SHORT":
-                return ("risk_reversal_bearish", leg1, leg2)  # Core: Put, Hedge: Call
-            elif leg1.direction == "SHORT" and leg2.direction == "LONG":
-                return ("risk_reversal_bullish", leg2, leg1)  # Core: Call, Hedge: Put
+        if call_leg and put_leg:
+            same_strike = call_leg.strike == put_leg.strike
+            
+            # Synthetic Long/Short: SAME strike (behaves like stock)
+            if same_strike:
+                if call_leg.direction == "LONG" and put_leg.direction == "SHORT":
+                    # Synthetic Long: Long Call + Short Put @ same strike
+                    # Behaves like long stock - no traditional hedge relationship
+                    # For free trade analysis, treat call as core (upside), put as hedge (financing)
+                    return ("synthetic_long", call_leg, put_leg)
+                elif call_leg.direction == "SHORT" and put_leg.direction == "LONG":
+                    # Synthetic Short: Short Call + Long Put @ same strike
+                    # Behaves like short stock
+                    return ("synthetic_short", put_leg, call_leg)
+            
+            # Risk Reversal: DIFFERENT strikes (directional bet with hedge)
+            else:
+                if call_leg.direction == "LONG" and put_leg.direction == "SHORT":
+                    return ("risk_reversal_bullish", call_leg, put_leg)  # Core: Call, Hedge: Put
+                elif call_leg.direction == "SHORT" and put_leg.direction == "LONG":
+                    return ("risk_reversal_bearish", put_leg, call_leg)  # Core: Put, Hedge: Call
         
         # Vertical Spreads (same type, different strikes)
         if leg1.leg_type == leg2.leg_type and leg1.strike != leg2.strike:
@@ -395,7 +412,8 @@ def print_analysis(analyses: list[PositionAnalysis], json_output: bool = False):
     print("\n" + "-" * 80)
     
     for analysis in analyses:
-        print(f"\n📊 {analysis.ticker} — {analysis.structure}")
+        structure_name = get_structure_display_name(analysis.structure_type, analysis.legs)
+        print(f"\n📊 {analysis.ticker} — {structure_name}")
         print(f"   Type: {analysis.structure_type.replace('_', ' ').title()}")
         print(f"   Expiry: {analysis.expiry}")
         print(f"   Contracts: {analysis.contracts}")
@@ -456,6 +474,42 @@ def get_startup_summary(analyses: list[PositionAnalysis], threshold: float = 50.
     return " | ".join(parts)
 
 
+def get_structure_display_name(structure_type: str, legs: list) -> str:
+    """Get human-readable structure name based on classified type and legs."""
+    type_names = {
+        "synthetic_long": "Synthetic Long",
+        "synthetic_short": "Synthetic Short",
+        "risk_reversal_bullish": "Risk Reversal (Bull)",
+        "risk_reversal_bearish": "Risk Reversal (Bear)",
+        "bull_call_spread": "Bull Call Spread",
+        "bear_call_spread": "Bear Call Spread",
+        "bull_put_spread": "Bull Put Spread",
+        "bear_put_spread": "Bear Put Spread",
+        "long_straddle_strangle": "Long Straddle/Strangle",
+        "short_straddle_strangle": "Short Straddle/Strangle",
+    }
+    
+    base_name = type_names.get(structure_type, structure_type.replace("_", " ").title())
+    
+    # Add strike info for synthetics and risk reversals
+    if structure_type in ("synthetic_long", "synthetic_short") and legs:
+        call_leg = next((l for l in legs if l.leg_type == "Call"), None)
+        if call_leg and call_leg.strike:
+            base_name += f" ${call_leg.strike:.0f}"
+    elif structure_type.startswith("risk_reversal") and len(legs) >= 2:
+        call_leg = next((l for l in legs if l.leg_type == "Call"), None)
+        put_leg = next((l for l in legs if l.leg_type == "Put"), None)
+        if call_leg and put_leg:
+            base_name += f" ${put_leg.strike:.0f}/${call_leg.strike:.0f}"
+    elif "spread" in structure_type and len(legs) >= 2:
+        strikes = sorted([l.strike for l in legs if l.strike])
+        if len(strikes) >= 2:
+            base_name = base_name.split()[0] + " " + base_name.split()[1]  # "Bull Call" or "Bear Put"
+            base_name += f" ${strikes[0]:.0f}/${strikes[1]:.0f}"
+    
+    return base_name
+
+
 def format_table(analyses: list[PositionAnalysis]) -> str:
     """Format analyses as an ASCII table for terminal output.
     
@@ -485,16 +539,17 @@ def format_table(analyses: list[PositionAnalysis]) -> str:
         try:
             expiry_date = datetime.strptime(a.expiry, "%Y-%m-%d").date()
             dte = (expiry_date - today).days
-        except:
+        except (ValueError, TypeError):
             dte = 0
         
-        # Format structure (truncate if needed)
-        structure_short = a.structure[:26] + ".." if len(a.structure) > 28 else a.structure
+        # Format structure using calculated type (not stored structure string)
+        structure_name = get_structure_display_name(a.structure_type, a.legs)
+        structure_short = structure_name[:26] + ".." if len(structure_name) > 28 else structure_name
         
         # Format expiry (just month/day)
         try:
             expiry_short = datetime.strptime(a.expiry, "%Y-%m-%d").strftime("%b %d")
-        except:
+        except (ValueError, TypeError):
             expiry_short = a.expiry[:8]
         
         # Determine status icon

@@ -23,7 +23,7 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-from utils.uw_api import uw_api_get
+from clients.uw_client import UWClient, UWAPIError
 from utils.market_calendar import (
     get_last_n_trading_days,
     load_holidays,
@@ -69,10 +69,19 @@ def get_existing_tickers() -> set:
     return tickers
 
 
-def fetch_options_flow(min_premium: int = 500000, limit: int = 100) -> list:
+def fetch_options_flow(min_premium: int = 500000, limit: int = 100, _client: UWClient = None) -> list:
     """Fetch market-wide options flow alerts."""
-    resp = uw_api_get("option-trades/flow-alerts", params={"min_premium": min_premium, "limit": limit})
-    return resp.get("data", [])
+    def _fetch(client):
+        try:
+            resp = client.get_flow_alerts(min_premium=min_premium, limit=limit)
+            return resp.get("data", [])
+        except UWAPIError:
+            return []
+
+    if _client is not None:
+        return _fetch(_client)
+    with UWClient() as client:
+        return _fetch(client)
 
 
 def analyze_darkpool_day(trades: list) -> dict:
@@ -119,25 +128,35 @@ def analyze_darkpool_day(trades: list) -> dict:
     }
 
 
-def fetch_darkpool_multi(ticker: str, days: int = 3) -> dict:
+def fetch_darkpool_multi(ticker: str, days: int = 3, _client: UWClient = None) -> dict:
     """Fetch multiple days of dark pool data for sustained direction analysis."""
     trading_days = get_last_n_trading_days(days)
-    
+
     daily_results = []
     all_trades = []
-    
-    for date in trading_days:
-        resp = uw_api_get(f"darkpool/{ticker}", params={"date": date})
-        trades = resp.get("data", [])
-        if isinstance(trades, list):
-            day_analysis = analyze_darkpool_day(trades)
-            day_analysis["date"] = date
-            daily_results.append(day_analysis)
-            all_trades.extend(trades)
-    
+
+    def _fetch(client):
+        for date in trading_days:
+            try:
+                resp = client.get_darkpool_flow(ticker, date=date)
+            except UWAPIError:
+                continue
+            trades = resp.get("data", [])
+            if isinstance(trades, list):
+                day_analysis = analyze_darkpool_day(trades)
+                day_analysis["date"] = date
+                daily_results.append(day_analysis)
+                all_trades.extend(trades)
+
+    if _client is not None:
+        _fetch(_client)
+    else:
+        with UWClient() as client:
+            _fetch(client)
+
     # Aggregate analysis
     aggregate = analyze_darkpool_day(all_trades)
-    
+
     # Calculate sustained direction (consecutive days same direction)
     sustained = 0
     if daily_results:
@@ -149,7 +168,7 @@ def fetch_darkpool_multi(ticker: str, days: int = 3) -> dict:
                     sustained += 1
                 else:
                     break
-    
+
     return {
         "aggregate": aggregate,
         "daily": daily_results,
@@ -236,116 +255,124 @@ def discover(min_premium: int = 500000, min_alerts: int = 1,
     Score is based on edge quality: DP strength, sustained direction, confluence.
     """
     print("Fetching market-wide options flow...", file=sys.stderr)
-    alerts = fetch_options_flow(min_premium=min_premium, limit=200)
-    
-    if not alerts:
-        return {"error": "No flow alerts found", "candidates": []}
-    
-    print(f"  Found {len(alerts)} alerts (>= ${min_premium/1000:.0f}K premium)", file=sys.stderr)
-    
-    existing = get_existing_tickers()
-    index_symbols = {"SPX", "SPXW", "NDX", "RUT", "VIX", "DJX", "OEX", "XSP"}
-    
-    # Aggregate options flow by ticker
-    ticker_data = defaultdict(lambda: {
-        "alerts": 0, "total_premium": 0, "calls": 0, "puts": 0,
-        "sweeps": 0, "vol_oi_ratios": [], "sector": "", "marketcap": 0,
-        "underlying_price": 0, "issue_type": ""
-    })
-    
-    for a in alerts:
-        ticker = a.get("ticker", "")
-        if not ticker or (exclude_indices and ticker in index_symbols):
-            continue
-        
-        prem = float(a.get("total_premium") or 0)
-        opt_type = (a.get("type") or "").upper()
-        vol_oi = float(a.get("volume_oi_ratio") or 0)
-        
-        ticker_data[ticker]["alerts"] += 1
-        ticker_data[ticker]["total_premium"] += prem
-        if opt_type == "CALL":
-            ticker_data[ticker]["calls"] += 1
-        elif opt_type == "PUT":
-            ticker_data[ticker]["puts"] += 1
-        if a.get("has_sweep"):
-            ticker_data[ticker]["sweeps"] += 1
-        if vol_oi > 0:
-            ticker_data[ticker]["vol_oi_ratios"].append(vol_oi)
-        ticker_data[ticker]["sector"] = a.get("sector") or ""
-        ticker_data[ticker]["marketcap"] = a.get("marketcap") or 0
-        ticker_data[ticker]["underlying_price"] = a.get("underlying_price") or 0
-        ticker_data[ticker]["issue_type"] = a.get("issue_type") or ""
-    
-    # Filter and score candidates
-    candidates = []
-    tickers_to_check = [t for t in ticker_data.keys() if t not in existing and ticker_data[t]["alerts"] >= min_alerts]
-    
-    print(f"  Checking {len(tickers_to_check)} candidates with DP data ({dp_days} days)...", file=sys.stderr)
-    
-    for i, ticker in enumerate(tickers_to_check, 1):
-        data = ticker_data[ticker]
-        print(f"    [{i}/{len(tickers_to_check)}] {ticker}...", file=sys.stderr, end=" ", flush=True)
-        
-        # Fetch dark pool data
-        dp = fetch_darkpool_multi(ticker, days=dp_days)
-        dp_agg = dp["aggregate"]
-        
-        # Determine options bias
-        if data["calls"] > data["puts"] * 1.5:
-            options_bias = "BULLISH"
-        elif data["puts"] > data["calls"] * 1.5:
-            options_bias = "BEARISH"
-        else:
-            options_bias = "MIXED"
-        
-        # Check confluence
-        has_confluence = (
-            (options_bias == "BULLISH" and dp_agg["direction"] == "ACCUMULATION") or
-            (options_bias == "BEARISH" and dp_agg["direction"] == "DISTRIBUTION")
-        )
-        
-        # Average vol/OI ratio
-        avg_vol_oi = sum(data["vol_oi_ratios"]) / len(data["vol_oi_ratios"]) if data["vol_oi_ratios"] else 0
-        
-        # Calculate normalized score
-        score_data = calculate_score(
-            dp_strength=dp_agg["strength"],
-            dp_sustained=dp["sustained_days"],
-            has_confluence=has_confluence,
-            vol_oi_ratio=avg_vol_oi,
-            sweep_count=data["sweeps"],
-            alert_count=data["alerts"]
-        )
-        
-        print(f"Score: {score_data['total']}", file=sys.stderr)
-        
-        candidate = {
-            "ticker": ticker,
-            "score": score_data["total"],
-            "score_breakdown": score_data["weighted"],
-            "alerts": data["alerts"],
-            "total_premium": data["total_premium"],
-            "calls": data["calls"],
-            "puts": data["puts"],
-            "options_bias": options_bias,
-            "sweeps": data["sweeps"],
-            "avg_vol_oi": round(avg_vol_oi, 2),
-            "sector": data["sector"],
-            "issue_type": data["issue_type"],
-            "dp_direction": dp_agg["direction"],
-            "dp_strength": dp_agg["strength"],
-            "dp_buy_ratio": dp_agg["buy_ratio"],
-            "dp_sustained_days": dp["sustained_days"],
-            "dp_total_prints": dp["total_prints"],
-            "confluence": has_confluence,
-        }
-        
-        candidates.append(candidate)
-    
+
+    with UWClient() as client:
+        alerts = fetch_options_flow(min_premium=min_premium, limit=200, _client=client)
+
+        if not alerts:
+            return {"error": "No flow alerts found", "candidates": []}
+
+        print(f"  Found {len(alerts)} alerts (>= ${min_premium/1000:.0f}K premium)", file=sys.stderr)
+
+        existing = get_existing_tickers()
+        index_symbols = {"SPX", "SPXW", "NDX", "RUT", "VIX", "DJX", "OEX", "XSP"}
+
+        # Aggregate options flow by ticker
+        ticker_data = defaultdict(lambda: {
+            "alerts": 0, "total_premium": 0, "calls": 0, "puts": 0,
+            "sweeps": 0, "vol_oi_ratios": [], "sector": "", "marketcap": 0,
+            "underlying_price": 0, "issue_type": ""
+        })
+
+        for a in alerts:
+            ticker = a.get("ticker", "")
+            if not ticker or (exclude_indices and ticker in index_symbols):
+                continue
+
+            prem = float(a.get("total_premium") or 0)
+            opt_type = (a.get("type") or "").upper()
+            vol_oi = float(a.get("volume_oi_ratio") or 0)
+
+            ticker_data[ticker]["alerts"] += 1
+            ticker_data[ticker]["total_premium"] += prem
+            if opt_type == "CALL":
+                ticker_data[ticker]["calls"] += 1
+            elif opt_type == "PUT":
+                ticker_data[ticker]["puts"] += 1
+            if a.get("has_sweep"):
+                ticker_data[ticker]["sweeps"] += 1
+            if vol_oi > 0:
+                ticker_data[ticker]["vol_oi_ratios"].append(vol_oi)
+            ticker_data[ticker]["sector"] = a.get("sector") or ""
+            ticker_data[ticker]["marketcap"] = a.get("marketcap") or 0
+            ticker_data[ticker]["underlying_price"] = a.get("underlying_price") or 0
+            ticker_data[ticker]["issue_type"] = a.get("issue_type") or ""
+
+        # Filter and score candidates
+        candidates = []
+        tickers_to_check = [
+            t for t in ticker_data.keys()
+            if t not in existing and ticker_data[t]["alerts"] >= min_alerts
+        ]
+
+        print(f"  Checking {len(tickers_to_check)} candidates with DP data ({dp_days} days)...", file=sys.stderr)
+
+        for i, ticker in enumerate(tickers_to_check, 1):
+            data = ticker_data[ticker]
+            print(f"    [{i}/{len(tickers_to_check)}] {ticker}...", file=sys.stderr, end=" ", flush=True)
+
+            # Fetch dark pool data
+            dp = fetch_darkpool_multi(ticker, days=dp_days, _client=client)
+            dp_agg = dp["aggregate"]
+
+            # Determine options bias
+            if data["calls"] > data["puts"] * 1.5:
+                options_bias = "BULLISH"
+            elif data["puts"] > data["calls"] * 1.5:
+                options_bias = "BEARISH"
+            else:
+                options_bias = "MIXED"
+
+            # Check confluence
+            has_confluence = (
+                (options_bias == "BULLISH" and dp_agg["direction"] == "ACCUMULATION") or
+                (options_bias == "BEARISH" and dp_agg["direction"] == "DISTRIBUTION")
+            )
+
+            # Average vol/OI ratio
+            avg_vol_oi = (
+                sum(data["vol_oi_ratios"]) / len(data["vol_oi_ratios"])
+                if data["vol_oi_ratios"] else 0
+            )
+
+            # Calculate normalized score
+            score_data = calculate_score(
+                dp_strength=dp_agg["strength"],
+                dp_sustained=dp["sustained_days"],
+                has_confluence=has_confluence,
+                vol_oi_ratio=avg_vol_oi,
+                sweep_count=data["sweeps"],
+                alert_count=data["alerts"]
+            )
+
+            print(f"Score: {score_data['total']}", file=sys.stderr)
+
+            candidate = {
+                "ticker": ticker,
+                "score": score_data["total"],
+                "score_breakdown": score_data["weighted"],
+                "alerts": data["alerts"],
+                "total_premium": data["total_premium"],
+                "calls": data["calls"],
+                "puts": data["puts"],
+                "options_bias": options_bias,
+                "sweeps": data["sweeps"],
+                "avg_vol_oi": round(avg_vol_oi, 2),
+                "sector": data["sector"],
+                "issue_type": data["issue_type"],
+                "dp_direction": dp_agg["direction"],
+                "dp_strength": dp_agg["strength"],
+                "dp_buy_ratio": dp_agg["buy_ratio"],
+                "dp_sustained_days": dp["sustained_days"],
+                "dp_total_prints": dp["total_prints"],
+                "confluence": has_confluence,
+            }
+
+            candidates.append(candidate)
+
     # Sort by score descending
     candidates.sort(key=lambda x: x["score"], reverse=True)
-    
+
     return {
         "discovery_time": datetime.now().isoformat(),
         "scoring_weights": WEIGHTS,

@@ -20,7 +20,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from utils.uw_api import uw_api_get
+from clients.uw_client import UWClient, UWNotFoundError, UWAPIError
 from utils.market_calendar import get_last_n_trading_days, load_holidays, _is_trading_day
 
 CACHE_FILE = Path(__file__).parent.parent / "data" / "ticker_cache.json"
@@ -82,10 +82,10 @@ def fetch_ticker_info(ticker: str) -> dict:
     """
     ticker = ticker.upper().strip()
     now = datetime.now()
-    
+
     # Check cache first
     cached = get_cached_ticker(ticker)
-    
+
     result = {
         "ticker": ticker,
         "fetched_at": now.isoformat(),
@@ -101,63 +101,63 @@ def fetch_ticker_info(ticker: str) -> dict:
         "options_available": False,
         "error": None
     }
-    
+
     # Get last 3 trading days
     trading_days = get_last_n_trading_days(3, now)
     result["trading_days_checked"] = trading_days
-    
+
     if not trading_days:
         result["error"] = "Could not determine recent trading days"
         return result
-    
+
     # Check dark pool data for those trading days
     total_prints = 0
     total_volume = 0
     total_premium = 0.0
     latest_price = None
-    
-    for date in trading_days:
-        resp = uw_api_get(f"/darkpool/{ticker}", params={"date": date})
-        
-        if "error" in resp:
-            if "404" in resp["error"]:
+
+    with UWClient() as client:
+        for date in trading_days:
+            try:
+                resp = client.get_darkpool_flow(ticker, date=date)
+            except UWNotFoundError:
                 result["error"] = f"Ticker '{ticker}' not found"
                 return result
-            # Other errors - continue trying
-            continue
-        
-        data = resp.get("data", [])
-        if isinstance(data, list):
-            total_prints += len(data)
-            for t in data:
-                if not t.get("canceled"):
-                    total_volume += int(t.get("size", 0))
-                    total_premium += float(t.get("premium", 0))
-                    if latest_price is None:
-                        latest_price = float(t.get("price", 0))
-    
-    if total_prints == 0:
-        result["error"] = f"No dark pool activity found for '{ticker}' (may be invalid or illiquid)"
-        return result
-    
-    # Ticker is valid - we have DP data
-    result["verified"] = True
-    result["current_price"] = latest_price
-    result["dp_prints_3d"] = total_prints
-    result["dp_volume_3d"] = total_volume
-    result["dp_premium_3d"] = round(total_premium, 2)
-    
-    # Check options availability via flow alerts
-    options_resp = uw_api_get("/option-trades/flow-alerts", params={
-        "ticker_symbol": ticker,
-        "limit": "10"
-    })
-    if "error" not in options_resp:
-        alerts = options_resp.get("data", [])
-        result["options_available"] = len(alerts) > 0 if isinstance(alerts, list) else False
-        if result["options_available"] and alerts:
-            result["recent_options_activity"] = True
-    
+            except UWAPIError:
+                # Other errors - continue trying
+                continue
+
+            data = resp.get("data", [])
+            if isinstance(data, list):
+                total_prints += len(data)
+                for t in data:
+                    if not t.get("canceled"):
+                        total_volume += int(t.get("size", 0))
+                        total_premium += float(t.get("premium", 0))
+                        if latest_price is None:
+                            latest_price = float(t.get("price", 0))
+
+        if total_prints == 0:
+            result["error"] = f"No dark pool activity found for '{ticker}' (may be invalid or illiquid)"
+            return result
+
+        # Ticker is valid - we have DP data
+        result["verified"] = True
+        result["current_price"] = latest_price
+        result["dp_prints_3d"] = total_prints
+        result["dp_volume_3d"] = total_volume
+        result["dp_premium_3d"] = round(total_premium, 2)
+
+        # Check options availability via flow alerts
+        try:
+            options_resp = client.get_flow_alerts(ticker=ticker, limit=10)
+            alerts = options_resp.get("data", [])
+            result["options_available"] = len(alerts) > 0 if isinstance(alerts, list) else False
+            if result["options_available"] and alerts:
+                result["recent_options_activity"] = True
+        except UWAPIError:
+            pass
+
     # Liquidity assessment based on DP volume
     num_days = len(trading_days)
     avg_daily_volume = total_volume / num_days if num_days > 0 else 0
@@ -168,7 +168,7 @@ def fetch_ticker_info(ticker: str) -> dict:
     else:
         result["liquidity_warning"] = None
         result["liquidity_note"] = "HIGH - Active dark pool trading"
-    
+
     return result
 
 
