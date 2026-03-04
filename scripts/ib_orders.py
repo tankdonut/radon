@@ -80,6 +80,7 @@ def serialize_contract(contract) -> dict:
         expiry = f"{expiry[:4]}-{expiry[4:6]}-{expiry[6:8]}"
 
     return {
+        "conId": getattr(contract, "conId", None),
         "symbol": contract.symbol,
         "secType": contract.secType,
         "strike": getattr(contract, "strike", None),
@@ -115,6 +116,7 @@ def fetch_open_orders(ib: IB) -> list:
 
         orders.append({
             "orderId": order.orderId,
+            "permId": order.permId,
             "symbol": format_contract(contract),
             "contract": serialize_contract(contract),
             "action": order.action,  # BUY or SELL

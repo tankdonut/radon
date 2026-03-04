@@ -21,6 +21,8 @@ import type { PriceData } from "@/lib/pricesProtocol";
 import { optionKey } from "@/lib/pricesProtocol";
 import { against, neutralRows, supports, watchRows } from "@/lib/data";
 import { useSort, type SortDirection } from "@/lib/useSort";
+import CancelOrderDialog from "./CancelOrderDialog";
+import ModifyOrderModal from "./ModifyOrderModal";
 
 /* ─── Sortable header cell ──────────────────────────────── */
 
@@ -765,7 +767,7 @@ function JournalSections() {
 
 /* ─── Orders tables ────────────────────────────────────── */
 
-type OpenOrderKey = "symbol" | "action" | "orderType" | "totalQuantity" | "limitPrice" | "status" | "tif";
+type OpenOrderKey = "symbol" | "action" | "orderType" | "totalQuantity" | "limitPrice" | "status" | "tif" | "actions";
 
 const openOrderExtract = (item: OpenOrder, key: OpenOrderKey): string | number | null => {
   switch (key) {
@@ -776,6 +778,7 @@ const openOrderExtract = (item: OpenOrder, key: OpenOrderKey): string | number |
     case "limitPrice": return item.limitPrice;
     case "status": return item.status;
     case "tif": return item.tif;
+    case "actions": return null; // not sortable
     default: return null;
   }
 };
@@ -795,9 +798,75 @@ const execOrderExtract = (item: ExecutedOrder, key: ExecOrderKey): string | numb
   }
 };
 
-function OrdersSections({ orders }: { orders: OrdersData | null }) {
+function OrdersSections({
+  orders,
+  prices,
+  addToast,
+  syncNow,
+  onOrdersUpdate,
+}: {
+  orders: OrdersData | null;
+  prices?: Record<string, PriceData>;
+  addToast?: (type: "error" | "warning" | "success", message: string, duration?: number) => void;
+  syncNow?: () => void;
+  onOrdersUpdate?: (data: OrdersData) => void;
+}) {
   const openSort = useSort(orders?.open_orders ?? [], openOrderExtract);
   const execSort = useSort<ExecutedOrder, ExecOrderKey>(orders?.executed_orders ?? [], execOrderExtract, "time", "desc");
+
+  const [cancelTarget, setCancelTarget] = useState<OpenOrder | null>(null);
+  const [modifyTarget, setModifyTarget] = useState<OpenOrder | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const handleCancel = useCallback(async () => {
+    if (!cancelTarget) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/orders/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: cancelTarget.orderId, permId: cancelTarget.permId }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        addToast?.("error", json.error || "Cancel failed");
+      } else {
+        addToast?.("success", json.message || "Order cancelled");
+        if (json.orders) onOrdersUpdate?.(json.orders);
+        else syncNow?.();
+      }
+    } catch {
+      addToast?.("error", "Cancel request failed");
+    } finally {
+      setActionLoading(false);
+      setCancelTarget(null);
+    }
+  }, [cancelTarget, addToast, syncNow, onOrdersUpdate]);
+
+  const handleModify = useCallback(async (newPrice: number) => {
+    if (!modifyTarget) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/orders/modify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: modifyTarget.orderId, permId: modifyTarget.permId, newPrice }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        addToast?.("error", json.error || "Modify failed");
+      } else {
+        addToast?.("success", json.message || "Order modified");
+        if (json.orders) onOrdersUpdate?.(json.orders);
+        else syncNow?.();
+      }
+    } catch {
+      addToast?.("error", "Modify request failed");
+    } finally {
+      setActionLoading(false);
+      setModifyTarget(null);
+    }
+  }, [modifyTarget, addToast, syncNow, onOrdersUpdate]);
 
   if (!orders) {
     return (
@@ -816,8 +885,24 @@ function OrdersSections({ orders }: { orders: OrdersData | null }) {
     );
   }
 
+  const canModify = (o: OpenOrder) => o.orderType === "LMT" || o.orderType === "STP LMT";
+
   return (
     <>
+      <CancelOrderDialog
+        order={cancelTarget}
+        loading={actionLoading}
+        onConfirm={handleCancel}
+        onClose={() => setCancelTarget(null)}
+      />
+      <ModifyOrderModal
+        order={modifyTarget}
+        loading={actionLoading}
+        prices={prices}
+        onConfirm={handleModify}
+        onClose={() => setModifyTarget(null)}
+      />
+
       <div className="section">
         <div className="section-header">
           <div className="section-title">
@@ -840,6 +925,7 @@ function OrdersSections({ orders }: { orders: OrdersData | null }) {
                   <SortTh<OpenOrderKey> label="Limit Price" sortKey="limitPrice" className="right" activeKey={openSort.sort.key} direction={openSort.sort.direction} onToggle={openSort.toggle} />
                   <SortTh<OpenOrderKey> label="Status" sortKey="status" activeKey={openSort.sort.key} direction={openSort.sort.direction} onToggle={openSort.toggle} />
                   <SortTh<OpenOrderKey> label="TIF" sortKey="tif" activeKey={openSort.sort.key} direction={openSort.sort.direction} onToggle={openSort.toggle} />
+                  <th className="actions-th">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -856,6 +942,22 @@ function OrdersSections({ orders }: { orders: OrdersData | null }) {
                     <td className="right">{o.limitPrice != null ? fmtPrice(o.limitPrice) : "—"}</td>
                     <td>{o.status}</td>
                     <td>{o.tif}</td>
+                    <td className="actions-cell">
+                      <button
+                        className="btn-order-action btn-modify"
+                        disabled={!canModify(o)}
+                        title={canModify(o) ? "Modify limit price" : "Only LMT orders can be modified"}
+                        onClick={() => setModifyTarget(o)}
+                      >
+                        MODIFY
+                      </button>
+                      <button
+                        className="btn-order-action btn-cancel"
+                        onClick={() => setCancelTarget(o)}
+                      >
+                        CANCEL
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -933,9 +1035,12 @@ type WorkspaceSectionsProps = {
   portfolio?: PortfolioData | null;
   orders?: OrdersData | null;
   prices?: Record<string, PriceData>;
+  addToast?: (type: "error" | "warning" | "success", message: string, duration?: number) => void;
+  syncNow?: () => void;
+  onOrdersUpdate?: (data: OrdersData) => void;
 };
 
-export default function WorkspaceSections({ section, portfolio, orders, prices }: WorkspaceSectionsProps) {
+export default function WorkspaceSections({ section, portfolio, orders, prices, addToast, syncNow, onOrdersUpdate }: WorkspaceSectionsProps) {
   switch (section) {
     case "dashboard":
       return null;
@@ -944,7 +1049,7 @@ export default function WorkspaceSections({ section, portfolio, orders, prices }
     case "portfolio":
       return <PortfolioSections portfolio={portfolio ?? null} prices={prices} />;
     case "orders":
-      return <OrdersSections orders={orders ?? null} />;
+      return <OrdersSections orders={orders ?? null} prices={prices} addToast={addToast} syncNow={syncNow} onOrdersUpdate={onOrdersUpdate} />;
     case "scanner":
       return <ScannerSections />;
     case "discover":

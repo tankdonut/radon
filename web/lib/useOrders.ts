@@ -12,6 +12,7 @@ type UseOrdersReturn = {
   error: string | null;
   lastSync: string | null;
   syncNow: () => void;
+  updateData: (data: OrdersData) => void;
 };
 
 export function useOrders(active: boolean): UseOrdersReturn {
@@ -93,5 +94,11 @@ export function useOrders(active: boolean): UseOrdersReturn {
     };
   }, [active, triggerSync]);
 
-  return { data, loading, syncing, error, lastSync, syncNow };
+  const updateData = useCallback((newData: OrdersData) => {
+    setData(newData);
+    setLastSync(newData.last_sync || null);
+    setError(null);
+  }, []);
+
+  return { data, loading, syncing, error, lastSync, syncNow, updateData };
 }

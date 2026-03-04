@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { RefreshCw } from "lucide-react";
-import type { WorkspaceSection } from "@/lib/types";
+import type { OrdersData, WorkspaceSection } from "@/lib/types";
 import { navItems } from "@/lib/data";
 import { resolveSectionFromPath } from "@/lib/chat";
 import { usePortfolio } from "@/lib/usePortfolio";
@@ -67,7 +67,7 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
   }, [ibConnected, addToast]);
 
   const isOrdersPage = activeSection === "orders";
-  const { data: orders, syncing: ordersSyncing, error: ordersError, lastSync: ordersLastSync, syncNow: ordersSyncNow } = useOrders(isOrdersPage);
+  const { data: orders, syncing: ordersSyncing, error: ordersError, lastSync: ordersLastSync, syncNow: ordersSyncNow, updateData: updateOrdersData } = useOrders(isOrdersPage);
   const syncing = isOrdersPage ? ordersSyncing : portfolioSyncing;
   const error = isOrdersPage ? ordersError : portfolioError;
   const lastSync = isOrdersPage ? ordersLastSync : portfolioLastSync;
@@ -136,7 +136,7 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
           {activeSection !== "dashboard" ? <MetricCards portfolio={portfolio} /> : null}
 
           {activeSection !== "dashboard" ? (
-            <WorkspaceSections section={activeSection} portfolio={portfolio} orders={orders} prices={prices} />
+            <WorkspaceSections section={activeSection} portfolio={portfolio} orders={orders} prices={prices} addToast={addToast} syncNow={ordersSyncNow} onOrdersUpdate={updateOrdersData} />
           ) : null}
         </div>
       </main>

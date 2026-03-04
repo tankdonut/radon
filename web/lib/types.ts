@@ -81,6 +81,7 @@ export type PortfolioPosition = {
 };
 
 export type OrderContract = {
+  conId: number | null;
   symbol: string;
   secType: string;
   strike: number | null;
@@ -90,6 +91,7 @@ export type OrderContract = {
 
 export type OpenOrder = {
   orderId: number;
+  permId: number;
   symbol: string;
   contract: OrderContract;
   action: string;
