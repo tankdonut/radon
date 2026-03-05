@@ -17,17 +17,52 @@ When fetching ANY market data (quotes, options, fundamentals, analyst ratings, e
 
 ---
 
-## ⚠️ Always Fetch Today's Data (Market Hours Rule)
+## ⚠️ Always Fetch Today's Data (MANDATORY)
 
-**Before ANY analysis (scan, evaluation, LEAP scan, etc.), ALWAYS fetch fresh market data for today.**
+**Every evaluation milestone that fetches data from a 3rd party MUST fetch fresh data at execution time. NEVER reuse data from a previous scan, session, or cached result.**
 
-This applies to:
-- `scan` — Fetch today's dark pool flow before scoring
-- `evaluate [TICKER]` — Fetch today's flow + options data
-- `leap-scan` — Fetch today's spot prices and IV levels
-- `discover` — Use today's flow alerts, not cached data
-- `seasonal` — Combine with today's price action
-- `analyst-ratings` — Fetch latest ratings (may have changed today)
+This is the #1 process rule. Violating it means the evaluation is invalid.
+
+### What "Fresh Data" Means Per Milestone
+
+| Milestone | Data Fetched | Script | Freshness Rule |
+|-----------|-------------|--------|----------------|
+| 1 — Ticker | Company info, market cap, price | `fetch_ticker.py` | Run at evaluation start |
+| 1B — Seasonality | Monthly historical performance | `curl` EquityClock | Static data, OK to cache |
+| 1C — Analysts | Ratings, price targets, changes | `fetch_analyst_ratings.py` | Re-fetch; may have changed today |
+| 2 — Dark Pool | 5-day DP flow including TODAY | `fetch_flow.py` | **MUST include today's date** |
+| 3 — Options Flow | Chain activity, flow alerts | `fetch_options.py` | **MUST be today's chain data** |
+| 3B — OI Changes | Open interest changes | `fetch_oi_changes.py` | **MUST be today's OI snapshot** |
+| 4 — Edge | Price action (today's close/last) | IB `reqHistoricalData` | **MUST include today's bar** |
+| 5 — Structure | Live option quotes (bid/ask/mid) | IB `reqMktData` | **MUST be real-time or today's close** |
+
+### Why This Matters
+
+A scan from earlier in the day (or yesterday) may show ACCUMULATION. But today's dark pool could show DISTRIBUTION — completely reversing the signal. Using stale data leads to trades against current institutional flow.
+
+**Real example (AAPL Mar 5):** Earlier scan showed 81.3% buy ratio through Mar 4. But Mar 5 data was never fetched — if Mar 5 was another distribution day, the sustained streak drops to 0 and edge fails.
+
+### Rules
+
+1. **OPEN market**: Fetch fresh data before EACH milestone. Do not reuse scan results.
+2. **CLOSED market**: Use most recent closing data. Note this in output.
+3. **Multi-ticker scans**: Batch fetch where possible (e.g., UW flow-alerts supports multiple tickers).
+4. **Cache TTL during market hours**: 5 minutes max for flow data, 15 minutes for analyst ratings.
+5. **Scan data ≠ evaluation data**: A `scan` provides CANDIDATES. When you `evaluate`, re-fetch everything — the scan data is only a lead, not evidence.
+
+### Verification
+
+Every evaluation output MUST include a **Data Freshness** line showing:
+```
+📊 Data as of: 2026-03-05 10:45 AM ET (LIVE)
+— or —
+📊 Data as of: 2026-03-04 4:00 PM ET (CLOSED — using closing data)
+```
+
+If any milestone uses data older than today, flag it:
+```
+⚠️ STALE DATA: Dark pool flow only through Mar 4 — Mar 5 not yet fetched
+```
 
 **Market Hours:**
 - US Options: **9:30 AM - 4:00 PM Eastern Time**, Monday-Friday
@@ -43,12 +78,6 @@ When market is closed, free trade analysis explicitly shows it's using closing p
 ```
 💰 FREE TRADE PROGRESS (closing prices as of Mar 04 16:00 ET)
 ```
-
-**Rules:**
-1. If market is **OPEN**: Fetch fresh data before analysis. Do not use cached/stale data.
-2. If market is **CLOSED**: Use most recent available data (closing prices). Note this in output.
-3. For multi-ticker scans: Batch fetch where possible (e.g., UW flow-alerts endpoint supports multiple tickers).
-4. Cache TTL during market hours: **5 minutes max** for flow data, **15 minutes** for analyst ratings.
 
 **Implementation:**
 - Scripts should import `from utils.market_hours import is_market_open, get_market_status`

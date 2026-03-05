@@ -29,7 +29,14 @@ All IB and UW access goes through centralized clients in `scripts/clients/`:
 - ALWAYS run `fetch_ticker.py` first to get verified company info
 - If script fails or returns no data, state "UNVERIFIED" and flag uncertainty
 
-### 2. Milestone Discipline
+### 2. Always Fetch Fresh Data (CRITICAL)
+- **Every evaluation milestone that calls a script or API MUST fetch live data at execution time**
+- Scan results are LEADS — when evaluating, re-fetch everything (dark pool, options, OI, analyst ratings)
+- If market is open, all data must include today. If a script's output doesn't include today's date, re-run or flag the gap
+- Include a `📊 Data as of:` timestamp line at the start of every evaluation
+- NEVER carry forward data from a prior scan session as if it were fresh evidence
+
+### 3. Milestone Discipline
 - Complete each milestone fully before proceeding
 - Run validation command for each milestone
 - If validation fails → repair immediately, do not continue

@@ -1,5 +1,19 @@
 # Evaluation Plan - Milestone Workflow
 
+## ⚠️ CRITICAL: Fresh Data Rule
+
+**Every milestone that fetches 3rd-party data MUST fetch it live at execution time.**
+
+- Scan results are LEADS, not evidence. Re-fetch everything during evaluation.
+- If market is open, data must be from today. Include timestamps in output.
+- If any data is stale (from a previous session/day), stop and re-fetch before proceeding.
+- Output a **Data Freshness** header at the start of every evaluation:
+  ```
+  📊 Data as of: 2026-03-05 10:45 AM ET (LIVE)
+  ```
+
+---
+
 ## Milestone 0: Startup Reconciliation (Automatic + Auto-Log)
 **Action**: Pi startup extension runs IB reconciliation asynchronously
 **Validation**: Check notification or `data/reconciliation.json`
@@ -65,6 +79,7 @@ curl -s -o /tmp/{TICKER}_sheet.png "https://charts.equityclock.com/seasonal_char
 
 ## Milestone 1C: Analyst Ratings
 **Action**: Fetch analyst consensus and recent changes
+**⚠️ FRESH DATA**: Re-fetch at evaluation time. Ratings may have changed since last scan.
 **Validation**:
 ```bash
 python3 scripts/fetch_analyst_ratings.py [TICKER]
@@ -73,29 +88,35 @@ python3 scripts/fetch_analyst_ratings.py [TICKER]
 - Buy/Hold/Sell breakdown retrieved
 - Price target and upside % calculated
 - Recent upgrades/downgrades noted
+- **Data timestamp included in output**
 **Output**: Analyst data is CONTEXT, not a gate
 **Note**: Use to confirm or question flow signals
 
 ---
 
 ## Milestone 2: Dark Pool Flow Analysis
-**Action**: Fetch 5-day dark pool / OTC data
+**Action**: Fetch 5-day dark pool / OTC data **including today**
+**⚠️ FRESH DATA**: MUST run `fetch_flow.py` live. Today's flow may confirm or reverse the signal from prior days. NEVER rely on scan results — re-fetch.
 **Validation**:
 ```bash
 python3 scripts/fetch_flow.py [TICKER]
 ```
 **Acceptance Criteria**:
 - Aggregate buy ratio calculated
-- Daily breakdown available
+- Daily breakdown available **including today's date**
 - Flow direction determined (ACCUMULATION/DISTRIBUTION/NEUTRAL)
 - Flow strength quantified (0-100)
 - Minimum 20 prints for statistical significance
+- **Today's flow explicitly shown and analyzed** (if market open/recently closed)
+- **Data timestamp included in output**
 **Stop Condition**: If NEUTRAL or <20 prints → FLAG insufficient edge signal
+**Stale Data Check**: If output does not include today's date → re-fetch or note gap
 
 ---
 
 ## Milestone 3: Options Flow Analysis
-**Action**: Fetch options chain activity and institutional flow alerts
+**Action**: Fetch options chain activity and institutional flow alerts **for today**
+**⚠️ FRESH DATA**: MUST run `fetch_options.py` live at evaluation time. Chain premium, volume, and flow alerts change throughout the day. NEVER reuse scan data.
 **Validation**:
 ```bash
 python3 scripts/fetch_options.py [TICKER]
@@ -109,6 +130,7 @@ python3 scripts/fetch_options.py [TICKER]
 - Flow bias and strength quantified (0-100)
 - Combined bias synthesized with confidence rating
 - Chain liquidity assessed (bid-ask spreads, OI)
+- **Data timestamp included in output**
 
 **Key Metrics**:
 | Metric | Source | Purpose |
@@ -133,6 +155,7 @@ python3 scripts/fetch_options.py [TICKER]
 ## Milestone 3B: OI Change Analysis (REQUIRED)
 **Action**: Fetch and analyze Open Interest changes to identify institutional positioning
 **When to Use**: **EVERY evaluation** — this is mandatory, not optional
+**⚠️ FRESH DATA**: MUST run `fetch_oi_changes.py` live. OI snapshots change daily — yesterday's OI data is stale.
 
 **Validation**:
 ```bash
@@ -198,11 +221,12 @@ MSFT270115C00675000       +50,148    $15,068,081   MASSIVE
 
 ## Milestone 4: Edge Determination
 **Action**: Synthesize flow data into edge verdict
+**⚠️ FRESH DATA**: Use ONLY data fetched in milestones 2, 3, 3B above (which must be today's data). Also fetch today's price action via IB to confirm signal is not yet priced in.
 **Criteria for PASS**:
-- Sustained direction (3+ consecutive days same direction)
+- Sustained direction (3+ consecutive days same direction) **including today**
 - Flow strength >50 on aggregate OR >70 on recent days
 - Options flow confirms (or at least doesn't contradict)
-- Signal NOT yet reflected in price (check recent price action)
+- Signal NOT yet reflected in price (check **today's** price action via IB)
 **Output**: EDGE_CONFIRMED or EDGE_REJECTED with specific reasoning
 **Stop Condition**: If EDGE_REJECTED → NO TRADE (stop here)
 
@@ -210,11 +234,12 @@ MSFT270115C00675000       +50,148    $15,068,081   MASSIVE
 
 ## Milestone 5: Structure Proposal
 **Action**: Design convex options structure
+**⚠️ FRESH DATA**: Fetch **live option quotes** (bid/ask/mid) from IB at structure time. Do NOT use option prices from an earlier session — IV and prices move intraday.
 **Options**:
 - ATM/OTM calls (bullish edge)
 - ATM/OTM puts (bearish edge)
 - Vertical spreads (defined risk, reduced cost)
-**Validation**: Structure must have R:R ≥ 2:1
+**Validation**: Structure must have R:R ≥ 2:1 based on **live quotes**
 **Stop Condition**: If R:R < 2:1 → restructure or ABORT
 
 **⭐ REQUIRED: Generate Trade Specification Report**
