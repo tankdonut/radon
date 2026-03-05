@@ -143,6 +143,25 @@
 
 ## Recent Evaluations
 
+### IBM — 2026-03-05 ⛔ NO_TRADE
+- **Decision**: NO_TRADE
+- **Failing Gate**: KELLY (Milestone 6) — Edge passed, Structure failed
+- **📊 Data as of**: 2026-03-05 2:01 PM PT (LIVE — all milestones fetched fresh)
+- **Edge PASSED**: 5 consecutive days of accumulation (Feb 27–Mar 5), today is STRONGEST day (83.1%)
+  - Feb 27: 73.3% → Mar 02: 80.4% → Mar 03: 82.3% → Mar 04: 81.7% → **Mar 05: 83.1%** (building)
+  - Aggregate 76.4%, strength 52.8 (threshold: 50 ✅)
+  - Sustained 5 days (threshold: 3 ✅)
+- **Options conflict is ARTIFICIAL**: 29.58x P/C ratio driven by deep ITM puts ($300/$305 strikes on $257 stock = synthetic/hedging). Actual flow alerts: $3.85M calls vs $2.39M puts = call-heavy. Recent bias BULLISH.
+- **Why no trade — Kelly negative on ALL structures tested**:
+  - $265/$285 spread: R:R 2.11:1 ✅, P(ITM)=0.48, conditional value=$10.50, EV=$5.04 < cost $6.43 → **Kelly -25%**
+  - $270/$285 spread: R:R 3.18:1 ✅, P(ITM)=0.40, EV=$3.80 < cost $3.59 → **Kelly -22%**
+  - $275/$290 OTM: R:R higher but P(ITM) too low → **Kelly -9%**
+- **Root cause**: IBM is a low-vol stock (HV20 ~37%, IV rank 42). Options are fairly priced for the expected move. The 5-day DP edge adds ~5-8% to ITM probability, but that's insufficient to overcome the option premium. IBM doesn't produce convex payoffs at current IV levels.
+- **Context**: Seasonality FAVORABLE (March 75% win rate). Analysts 60% Buy, $276 target (+7.5%). OI changes all MODERATE ($4.7M total, no massive signals).
+- **Ticker Verified**: YES — IBM, Technology, $250/share
+- **Lesson**: A genuine DP signal on a low-vol name can still fail Kelly. Edge ≠ trade. Convexity requires sufficient vol to create asymmetric payoffs.
+- **Action**: WATCH only. Would need IBM IV to compress significantly (IVR < 20) or DP flow to intensify (90%+ buy ratio) before reconsidering.
+
 ### NFLX (Netflix) - 2026-03-05 ⛔ NO_TRADE
 - **Decision**: NO_TRADE
 - **Failing Gate**: EDGE (Milestone 4)
