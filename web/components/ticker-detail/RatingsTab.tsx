@@ -58,7 +58,12 @@ export default function RatingsTab({ ticker, active, currentPrice }: RatingsTabP
         throw new Error(json.error || `Failed to fetch ratings (${res.status})`);
       }
       const json = await res.json();
-      setData(json);
+      // API may return array — unwrap first element
+      const item = Array.isArray(json) ? json[0] : json;
+      if (item?.error) {
+        throw new Error(item.error);
+      }
+      setData(item ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch ratings");
     } finally {
