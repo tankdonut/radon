@@ -215,6 +215,44 @@ export type DiscoverData = {
   candidates: DiscoverCandidate[];
 };
 
+// Blotter types (historical trades from IB Flex Query)
+export type BlotterExecution = {
+  exec_id: string;
+  time: string;
+  side: string;
+  quantity: number;
+  price: number;
+  commission: number;
+  notional_value: number;
+  net_cash_flow: number;
+};
+
+export type BlotterTrade = {
+  symbol: string;
+  contract_desc: string;
+  sec_type: string;
+  is_closed: boolean;
+  net_quantity: number;
+  total_commission: number;
+  realized_pnl: number;
+  cost_basis: number;
+  proceeds: number;
+  total_cash_flow: number;
+  executions: BlotterExecution[];
+};
+
+export type BlotterData = {
+  as_of: string;
+  summary: {
+    closed_trades: number;
+    open_trades: number;
+    total_commissions: number;
+    realized_pnl: number;
+  };
+  closed_trades: BlotterTrade[];
+  open_trades: BlotterTrade[];
+};
+
 // Real-time pricing types
 export type PriceData = {
   symbol: string;
