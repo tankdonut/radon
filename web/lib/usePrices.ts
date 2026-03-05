@@ -112,7 +112,7 @@ export function usePrices(options: UsePricesOptions): UsePricesReturn {
     };
 
     ws.onmessage = (event) => {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || ws !== wsRef.current) return;
       try {
         const message = JSON.parse(event.data) as WSMessage;
 
@@ -150,7 +150,10 @@ export function usePrices(options: UsePricesOptions): UsePricesReturn {
     };
 
     ws.onclose = () => {
-      if (!mountedRef.current) return;
+      // If this WS was replaced by a newer connection, ignore the stale close event.
+      // Without this guard, the old onclose fires after mountedRef is reset to true,
+      // scheduling a 5s reconnect that creates an infinite reconnection cycle.
+      if (!mountedRef.current || ws !== wsRef.current) return;
       setConnected(false);
       onConnectionChange?.(false);
 
@@ -164,7 +167,7 @@ export function usePrices(options: UsePricesOptions): UsePricesReturn {
     };
 
     ws.onerror = () => {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || ws !== wsRef.current) return;
       setConnected(false);
       setError("Connection lost");
       onConnectionChange?.(false);
