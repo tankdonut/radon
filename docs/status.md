@@ -1,9 +1,14 @@
 # Status & Decision Log
 
 ## Last Updated
-2026-03-05T11:10:00-08:00
+2026-03-05T11:24:00-08:00
 
 ## Recent Commits
+- 2026-03-05 11:24:00 -0800 — Route evaluate command to python script: explicit instructions in AGENTS.md and plans.md
+- 2026-03-05 11:22:00 -0800 — **feat: Improved RatingsTab — maps nested UW API response, shows buy/sell %, distribution bar, price targets with upside/downside, analyst actions with firm/grade**
+- 2026-03-05 11:20:00 -0800 — **feat: News tab fallback to Yahoo Finance when UW is rate-limited (429)**
+- 2026-03-05 11:18:00 -0800 — evaluate.py: Unified evaluation script with parallel milestones, 34 TDD tests
+- 2026-03-05 11:15:00 -0800 — docs: Add data normalization rules, update status with recent fixes
 - 2026-03-05 11:10:00 -0800 — Fix discover.py KeyError on watchlist entries with 'symbol' instead of 'ticker'
 - 2026-03-05 11:05:00 -0800 — **Fix: open orders visible in ticker detail modal on ALL pages (not just /orders)**
 - 2026-03-05 09:59:00 -0800 — docs: Add Calculations correctness rules section to CLAUDE.md
@@ -340,6 +345,9 @@ Click any ticker across all 6 table sections → 720px modal with:
 9. ~~Spread orders showing underlying stock price~~ **FIXED** — BAG orders now compute net mid from portfolio legs (`resolveOrderLastPrice()`). Order form BID/MID/ASK buttons now use option-level prices via `tickerPriceData` prop.
 10. ~~Ticker detail modal not showing open orders on non-orders pages~~ **FIXED** — `useOrders()` now always reads cached orders on mount; IB auto-sync still only on /orders page.
 11. ~~discover.py crash: KeyError 'ticker' in watchlist~~ **FIXED** — `get_existing_tickers()` handles both `ticker` and `symbol` keys. Normalize all watchlist entries to `ticker`.
+12. ~~News tab fails silently when UW rate-limited~~ **FIXED** — `/api/ticker/news` route now falls back to Yahoo Finance RSS when UW returns 429. Both sources handle failure gracefully with user-facing error message.
+13. ~~RatingsTab shows raw/empty data from UW API~~ **FIXED** — Complete rewrite to properly map nested UW response structure (`ratings.buy`, `target_price.mean`, `upgrade_downgrade_history`). Now shows buy/sell percentages, visual distribution bar, price targets with upside/downside calculation, and analyst actions table with firm name and grade.
+14. **Data normalization rule**: All data files (watchlist.json, discover.json) must use `"ticker"` as the canonical key, never `"symbol"`. Scripts that read these files handle both for backward compatibility.
 
 ## Follow-ups
 - [x] Implement trade blotter service
@@ -368,6 +376,11 @@ Click any ticker across all 6 table sections → 720px modal with:
 - [x] **Ticker detail modal works identically on all pages (portfolio, orders, discover, journal, flow)**
 - [x] **useOrders() always loads cached orders on mount for cross-page ticker detail**
 - [x] **Fix discover.py watchlist KeyError (normalize ticker/symbol key)**
+- [x] **News tab UW → Yahoo Finance fallback on 429 rate limit**
+- [x] **RatingsTab rewrite: nested API mapping, buy/sell %, distribution bar, price targets, analyst actions**
+- [x] **All-sources-failed graceful handling in News and Ratings tabs**
+- [x] **Data normalization: canonical "ticker" key in all data files**
+- [x] **evaluate.py unified evaluation script with 34 TDD tests**
 - [ ] Execute MSFT LEAP call trade (pending confirmation)
 - [ ] Close undefined risk positions before Friday expiry
 - [ ] Review PLTR for profit-taking (23 DTE, +175%)
