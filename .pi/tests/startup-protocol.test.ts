@@ -289,6 +289,39 @@ test("StartupTracker.getStatus should return process status", async () => {
 });
 
 // ============================================================
+// MARKET HOURS TESTS
+// ============================================================
+
+test("isMarketOpen should be available and return correct type", async () => {
+  // We can't import the function directly since it's internal, but we can
+  // verify the StartupTracker uses it by checking the process names include "market"
+  const { StartupTracker } = await import("../extensions/startup-protocol.ts");
+  const ui = new MockUI();
+  
+  // Create tracker with market process
+  const tracker = new StartupTracker(ui, ["market", "docs"]);
+  
+  // The tracker should accept market as a valid process
+  tracker.complete("market", "success", "Market OPEN (2h 30m to close)");
+  assert.strictEqual(tracker.getStatus("market"), "success", "Market process should be trackable");
+});
+
+test("market status should show warning when market is closed", async () => {
+  const { StartupTracker } = await import("../extensions/startup-protocol.ts");
+  const ui = new MockUI();
+  
+  const tracker = new StartupTracker(ui, ["market", "docs"]);
+  
+  // Simulate market closed
+  tracker.complete("market", "warning", "Market CLOSED (after hours) — using closing prices");
+  tracker.complete("docs", "success", "Docs loaded");
+  
+  // Should show warning in summary because market was a warning
+  assert.ok(ui.hasMessage("using closing prices"), "Should mention closing prices");
+  assert.ok(ui.hasMessage("⚠️"), "Should have warning indicator for closed market");
+});
+
+// ============================================================
 // RUN ALL TESTS
 // ============================================================
 

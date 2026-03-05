@@ -26,13 +26,31 @@ import sys
 from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 # Project paths
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 DATA_DIR = PROJECT_ROOT / "data"
 PORTFOLIO_FILE = DATA_DIR / "portfolio.json"
+
+# Add utils to path
+sys.path.insert(0, str(SCRIPT_DIR))
+
+try:
+    from utils.market_hours import is_market_open, get_market_status, get_last_market_close
+    MARKET_HOURS_AVAILABLE = True
+except ImportError:
+    MARKET_HOURS_AVAILABLE = False
+    
+    def is_market_open():
+        return True  # Assume open if can't check
+    
+    def get_market_status():
+        return True, "UNKNOWN"
+    
+    def get_last_market_close():
+        return None
 
 
 @dataclass
@@ -510,10 +528,14 @@ def get_structure_display_name(structure_type: str, legs: list) -> str:
     return base_name
 
 
-def format_table(analyses: list[PositionAnalysis]) -> str:
+def format_table(analyses: list[PositionAnalysis], show_market_status: bool = True) -> str:
     """Format analyses as an ASCII table for terminal output.
     
     Shows ALL qualifying multi-leg positions regardless of progress percentage.
+    
+    Args:
+        analyses: List of position analyses
+        show_market_status: If True, indicate when using closing prices
     """
     if not analyses:
         return "No multi-leg positions found."
@@ -524,7 +546,20 @@ def format_table(analyses: list[PositionAnalysis]) -> str:
     today = date.today()
     
     lines = []
-    lines.append("💰 FREE TRADE PROGRESS")
+    
+    # Check market status and add indicator if closed
+    market_open = is_market_open()
+    if show_market_status and not market_open:
+        _, status_msg = get_market_status()
+        last_close = get_last_market_close()
+        if last_close:
+            close_str = last_close.strftime("%b %d %H:%M ET")
+            lines.append(f"💰 FREE TRADE PROGRESS (closing prices as of {close_str})")
+        else:
+            lines.append(f"💰 FREE TRADE PROGRESS ({status_msg} - using closing prices)")
+    else:
+        lines.append("💰 FREE TRADE PROGRESS")
+    
     lines.append("=" * 70)
     lines.append(f"{'Ticker':<8} {'Structure':<28} {'Expiry':<8} {'DTE':>4} {'Progress':>10} {'Status':<10}")
     lines.append("-" * 70)

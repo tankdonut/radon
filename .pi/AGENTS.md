@@ -29,21 +29,29 @@ This applies to:
 - `seasonal` — Combine with today's price action
 - `analyst-ratings` — Fetch latest ratings (may have changed today)
 
-**How to check if market is open:**
-```bash
-# US market hours: 9:30 AM - 4:00 PM ET, Mon-Fri (excluding holidays)
-# Check current time in ET
-TZ=America/New_York date +"%A %H:%M"
+**Market Hours:**
+- US Options: **9:30 AM - 4:00 PM Eastern Time**, Monday-Friday
+- Utility: `scripts/utils/market_hours.py` provides `is_market_open()`, `get_market_status()`, `get_last_market_close()`
+
+**Startup Protocol Market Check:**
+The startup protocol automatically checks market status and shows in the first line:
+- Market OPEN: `[1/N] ✓ Market OPEN (Xh Ym to close)`
+- Market CLOSED: `[1/N] ⚠️ Market CLOSED (after hours) — using closing prices`
+
+**Free Trade Progress During Closed Market:**
+When market is closed, free trade analysis explicitly shows it's using closing prices:
+```
+💰 FREE TRADE PROGRESS (closing prices as of Mar 04 16:00 ET)
 ```
 
 **Rules:**
 1. If market is **OPEN**: Fetch fresh data before analysis. Do not use cached/stale data.
-2. If market is **CLOSED**: Use most recent available data. Note "Market closed — using last available data" in output.
+2. If market is **CLOSED**: Use most recent available data (closing prices). Note this in output.
 3. For multi-ticker scans: Batch fetch where possible (e.g., UW flow-alerts endpoint supports multiple tickers).
 4. Cache TTL during market hours: **5 minutes max** for flow data, **15 minutes** for analyst ratings.
 
 **Implementation:**
-- Scripts should check market status and log data freshness
+- Scripts should import `from utils.market_hours import is_market_open, get_market_status`
 - Include timestamp of data fetch in all analysis output
 - If IB connection unavailable during market hours, fall back to UW/Yahoo but note the degraded state
 
@@ -847,21 +855,33 @@ python3 scripts/ib_sync.py --port 4002   # IB Gateway Paper
 
 When Pi starts, the startup extension (`.pi/extensions/startup-protocol.ts`) runs all checks with **numbered progress indicators**:
 
-**Example output:**
+**Example output (market open):**
 ```
-🚀 Startup: Running 5 checks...
-[1/5] ✓ Loaded: Spec, Plans, Runbook, Status, Context Engineering
-[2/5] ✓ IB trades in sync
-[3/5] ✓ Monitor daemon running
-[4/5] ✓ Free Trade Progress:
-       AAOI: 57% ⚡ Near
-       EWY: 52% ⚡ Near
-       IGV: 49% 🔄 Progress
-       BKD: 16% ⏳ Early
-       GOOG: 1% ⏳ Early
-[5/5] ✓ @aleabitoreddit: scanned 0.7h ago
-✅ Startup complete (5/5 passed)
+🚀 Startup: Running 6 checks...
+[1/6] ✓ Market OPEN (2h 30m to close)
+[2/6] ✓ Loaded: Spec, Plans, Runbook, Status, Context Engineering
+[3/6] ✓ IB trades in sync
+[4/6] ✓ Monitor daemon running
+[5/6] ✓ Free Trade Progress:
+       EWY: 100% 🎉 FREE
+       PLTR: 89% ⚡ Near
+[6/6] ✓ @aleabitoreddit: 54 tweets, 40 updated
+✅ Startup complete (6/6 passed)
 ```
+
+**Example output (market closed):**
+```
+🚀 Startup: Running 6 checks...
+[1/6] ⚠️ Market CLOSED (after hours) — using closing prices
+[2/6] ✓ Loaded: Spec, Plans, Runbook, Status, Context Engineering
+...
+```
+
+**Market Hours Check:**
+- First process in every startup
+- Shows warning icon (⚠️) when market is closed
+- Indicates that free trade progress uses closing prices (not real-time)
+- Uses Eastern Time (9:30 AM - 4:00 PM ET)
 
 **X Account Scan:**
 - Runs automatically on **every startup**
@@ -871,11 +891,12 @@ When Pi starts, the startup extension (`.pi/extensions/startup-protocol.ts`) run
 
 | # | Process | Type | Description |
 |---|---------|------|-------------|
-| 1 | `docs` | sync | Load project docs + always-on skills |
-| 2 | `ib` | async | IB trade reconciliation (runs first, updates portfolio) |
-| 3 | `free_trade` | async | Free trade scan (waits for IB to complete) |
-| 4 | `daemon` | sync | Monitor daemon status check |
-| 5+ | `x_{account}` | async | X account scans (parallel with above) |
+| 1 | `market` | sync | Market hours check (9:30 AM - 4:00 PM ET) |
+| 2 | `docs` | sync | Load project docs + always-on skills |
+| 3 | `ib` | async | IB trade reconciliation (runs first, updates portfolio) |
+| 4 | `free_trade` | async | Free trade scan (waits for IB to complete) |
+| 5 | `daemon` | sync | Monitor daemon status check |
+| 6+ | `x_{account}` | async | X account scans (parallel with above) |
 
 **Note:** Free trade analysis depends on IB sync because closed positions affect which multi-leg positions exist.
 

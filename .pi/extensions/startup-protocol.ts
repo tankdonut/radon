@@ -14,6 +14,54 @@ import { execSync, spawn } from "node:child_process";
  * Also checks for pending X account scans based on last scan time.
  */
 
+/**
+ * Check if US options markets are currently open.
+ * Options trade 9:30 AM - 4:00 PM Eastern Time, Monday-Friday.
+ */
+function isMarketOpen(): { isOpen: boolean; status: string } {
+  const now = new Date();
+  
+  // Convert to Eastern Time
+  const etOptions: Intl.DateTimeFormatOptions = { 
+    timeZone: 'America/New_York', 
+    hour: 'numeric', 
+    minute: 'numeric',
+    hour12: false,
+    weekday: 'short'
+  };
+  const etFormatter = new Intl.DateTimeFormat('en-US', etOptions);
+  const parts = etFormatter.formatToParts(now);
+  
+  const weekday = parts.find(p => p.type === 'weekday')?.value || '';
+  const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+  const minute = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+  const timeInMinutes = hour * 60 + minute;
+  
+  // Market hours: 9:30 AM (570 mins) to 4:00 PM (960 mins)
+  const marketOpen = 9 * 60 + 30;  // 570
+  const marketClose = 16 * 60;      // 960
+  
+  // Check weekend
+  if (weekday === 'Sat' || weekday === 'Sun') {
+    return { isOpen: false, status: 'CLOSED (weekend)' };
+  }
+  
+  // Check time
+  if (timeInMinutes < marketOpen) {
+    const minsToOpen = marketOpen - timeInMinutes;
+    const h = Math.floor(minsToOpen / 60);
+    const m = minsToOpen % 60;
+    return { isOpen: false, status: h > 0 ? `pre-market, ${h}h ${m}m to open` : `pre-market, ${m}m to open` };
+  } else if (timeInMinutes >= marketClose) {
+    return { isOpen: false, status: 'after hours' };
+  } else {
+    const minsToClose = marketClose - timeInMinutes;
+    const h = Math.floor(minsToClose / 60);
+    const m = minsToClose % 60;
+    return { isOpen: true, status: h > 0 ? `OPEN (${h}h ${m}m to close)` : `OPEN (${m}m to close)` };
+  }
+}
+
 // UI interface for notifications
 interface NotifyUI {
   notify(message: string, level: "info" | "warning" | "error"): void;
@@ -557,11 +605,12 @@ END ALWAYS-ON SKILLS
     const docs = loadProjectDocs(ctx.cwd);
     const skills = loadAlwaysOnSkills(ctx.cwd);
     const xScans = checkXScanStatus(ctx.cwd);
+    const marketStatus = isMarketOpen();
     
     // Build list of processes to track
     // Order matters: IB sync must complete BEFORE free trade analysis
     // because closed positions affect which multi-leg positions exist
-    const processNames: string[] = ["docs", "ib", "free_trade", "daemon"];
+    const processNames: string[] = ["market", "docs", "ib", "free_trade", "daemon"];
     
     // Add ALL X accounts to process list (not just pending scans)
     for (const scan of xScans) {
@@ -570,6 +619,13 @@ END ALWAYS-ON SKILLS
     
     // Create tracker
     const tracker = new StartupTracker(ctx.ui, processNames);
+    
+    // Report market status first
+    if (marketStatus.isOpen) {
+      tracker.complete("market", "success", `Market ${marketStatus.status}`);
+    } else {
+      tracker.complete("market", "warning", `Market CLOSED (${marketStatus.status}) — using closing prices`);
+    }
     
     // Complete docs immediately (sync)
     const allLoaded = [...docs.loaded, ...skills.loaded];
