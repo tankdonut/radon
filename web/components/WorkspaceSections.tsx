@@ -454,6 +454,7 @@ function PositionRow({ pos, showExpiry = true, showStrike = false, showUnderlyin
     let allLegsHavePrices = true;
     let rtMv = 0;
     let rtDailyPnl = 0;
+    let rtCloseValue = 0;
     for (const leg of pos.legs) {
       const key = legPriceKey(pos.ticker, pos.expiry, leg);
       const lp = key ? prices[key] : null;
@@ -465,10 +466,11 @@ function PositionRow({ pos, showExpiry = true, showStrike = false, showUnderlyin
       rtMv += sign * lp.last * leg.contracts * 100;
       if (lp.close != null && lp.close > 0) {
         rtDailyPnl += sign * (lp.last - lp.close) * leg.contracts * 100;
+        rtCloseValue += sign * lp.close * leg.contracts * 100;
       }
     }
     if (!allLegsHavePrices) return null;
-    return { mv: rtMv, dailyPnl: rtDailyPnl };
+    return { mv: rtMv, dailyPnl: rtDailyPnl, closeValue: rtCloseValue };
   }, [isStock, prices, pos.legs, pos.ticker, pos.expiry]);
 
   const mv = rtLast != null ? rtLast * pos.contracts : optionsRt?.mv ?? resolveMarketValue(pos);
@@ -480,11 +482,11 @@ function PositionRow({ pos, showExpiry = true, showStrike = false, showUnderlyin
   const lastPriceIsCalculated = rtLast != null || optionsRt != null ? false : getLastPriceIsCalculated(pos);
   const { direction: priceDirection, flashDirection } = usePriceDirection(lastPrice);
   // Stock: daily change from underlying WS price
-  // Options: daily change from leg-level WS prices expressed as % of entry cost
+  // Options: daily change from leg-level WS prices as % of yesterday's close value
   const dailyChg = isStock
     ? getDailyChange(realtimePrice)
-    : optionsRt != null && entryCost !== 0
-      ? (optionsRt.dailyPnl / Math.abs(entryCost)) * 100
+    : optionsRt != null && optionsRt.closeValue !== 0
+      ? (optionsRt.dailyPnl / Math.abs(optionsRt.closeValue)) * 100
       : null;
 
   // For single-leg options, show strike in structure column
@@ -563,19 +565,20 @@ function getOptionRtMv(pos: PortfolioPosition, prices?: Record<string, PriceData
   return rtMv;
 }
 
-function getOptionDailyChg(pos: PortfolioPosition, prices?: Record<string, PriceData>): number | null {
+export function getOptionDailyChg(pos: PortfolioPosition, prices?: Record<string, PriceData>): number | null {
   if (pos.structure_type === "Stock" || !prices) return null;
   let dailyPnl = 0;
+  let closeValue = 0;
   for (const leg of pos.legs) {
     const key = legPriceKey(pos.ticker, pos.expiry, leg);
     const lp = key ? prices[key] : null;
     if (!lp || lp.last == null || lp.last <= 0 || lp.close == null || lp.close <= 0) return null;
     const sign = leg.direction === "LONG" ? 1 : -1;
     dailyPnl += sign * (lp.last - lp.close) * leg.contracts * 100;
+    closeValue += sign * lp.close * leg.contracts * 100;
   }
-  const entryCost = resolveEntryCost(pos);
-  if (entryCost === 0) return null;
-  return (dailyPnl / Math.abs(entryCost)) * 100;
+  if (closeValue === 0) return null;
+  return (dailyPnl / Math.abs(closeValue)) * 100;
 }
 
 function makePositionExtract(prices?: Record<string, PriceData>) {
