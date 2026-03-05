@@ -18,7 +18,6 @@ import Header from "@/components/Header";
 import ChatPanel from "@/components/ChatPanel";
 import MetricCards from "@/components/MetricCards";
 import WorkspaceSections from "@/components/WorkspaceSections";
-import ConnectionBanner from "@/components/ConnectionBanner";
 import ToastContainer from "@/components/Toast";
 import TickerDetailModal from "@/components/TickerDetailModal";
 import { useTickerDetail } from "@/lib/TickerDetailContext";
@@ -202,8 +201,6 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
             </button>
           </div>
         </Header>
-
-        <ConnectionBanner ibConnected={ibConnected} wsConnected={wsConnected} />
 
         <div className="content">
           {activeSection === "dashboard" ? <ChatPanel activeSection={activeSection} /> : null}
