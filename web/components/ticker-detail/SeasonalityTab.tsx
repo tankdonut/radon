@@ -32,10 +32,10 @@ const MONTH_FULL = [
 
 type Rating = "FAVORABLE" | "NEUTRAL" | "UNFAVORABLE";
 
-function rateMonth(winRate: number, avgReturn: number): Rating {
-  // winRate is decimal (0.65 = 65%), avgReturn is decimal (0.05 = 5%)
-  if (winRate > 0.6 && avgReturn > 0.05) return "FAVORABLE";
-  if (winRate < 0.5 || avgReturn < 0) return "UNFAVORABLE";
+function rateMonth(winRate: number, _avgReturn: number): Rating {
+  // winRate is decimal (0.65 = 65%)
+  if (winRate > 0.6) return "FAVORABLE";
+  if (winRate < 0.5) return "UNFAVORABLE";
   return "NEUTRAL";
 }
 
@@ -254,13 +254,13 @@ export default function SeasonalityTab({ ticker, active }: SeasonalityTabProps) 
       {/* Legend */}
       <div className="seasonality-legend">
         <span className="seasonality-legend-item">
-          <span className="seasonality-legend-dot seasonality-favorable" /> FAVORABLE: win rate &gt;60% + avg return &gt;5%
+          <span className="seasonality-legend-dot seasonality-favorable" /> FAVORABLE: win rate &gt;60%
         </span>
         <span className="seasonality-legend-item">
-          <span className="seasonality-legend-dot seasonality-neutral" /> NEUTRAL: 50-60% win / 0-5% return
+          <span className="seasonality-legend-dot seasonality-neutral" /> NEUTRAL: 50-60% win rate
         </span>
         <span className="seasonality-legend-item">
-          <span className="seasonality-legend-dot seasonality-unfavorable" /> UNFAVORABLE: below thresholds
+          <span className="seasonality-legend-dot seasonality-unfavorable" /> UNFAVORABLE: win rate &lt;50%
         </span>
       </div>
     </div>

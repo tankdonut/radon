@@ -273,7 +273,7 @@ Full spec: `docs/unusual_whales_api.md` | `docs/unusual_whales_api_spec.yaml`
 `60–100` Strong (full eval) | `40–59` Monitor | `20–39` Weak | `<20` No signal
 
 **Seasonality Rating:**
-`FAVORABLE` = win rate >60% + avg return >5% | `NEUTRAL` = 50–60% / 0–5% | `UNFAVORABLE` = below
+`FAVORABLE` = win rate >60% | `NEUTRAL` = 50–60% | `UNFAVORABLE` = win rate <50%
 
 > Seasonality and analyst ratings are **context, not gates.** Strong flow can override weak seasonality. Weak flow + weak seasonality = pass entirely.
 
