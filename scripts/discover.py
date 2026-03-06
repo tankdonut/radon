@@ -23,6 +23,7 @@ import argparse
 import json
 import sys
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -145,18 +146,32 @@ def fetch_darkpool_multi(ticker: str, days: int = 3, _client: UWClient = None) -
     daily_results = []
     all_trades = []
 
+    def _fetch_day(client, date):
+        try:
+            resp = client.get_darkpool_flow(ticker, date=date)
+        except UWAPIError:
+            return None, []
+        trades = resp.get("data", [])
+        if isinstance(trades, list):
+            day_analysis = analyze_darkpool_day(trades)
+            day_analysis["date"] = date
+            return day_analysis, trades
+        return None, []
+
     def _fetch(client):
-        for date in trading_days:
-            try:
-                resp = client.get_darkpool_flow(ticker, date=date)
-            except UWAPIError:
-                continue
-            trades = resp.get("data", [])
-            if isinstance(trades, list):
-                day_analysis = analyze_darkpool_day(trades)
-                day_analysis["date"] = date
-                daily_results.append(day_analysis)
-                all_trades.extend(trades)
+        with ThreadPoolExecutor(max_workers=len(trading_days)) as pool:
+            futures = {pool.submit(_fetch_day, client, d): d for d in trading_days}
+            # Collect in date order
+            results_by_date = {}
+            for future in as_completed(futures):
+                date = futures[future]
+                day_analysis, trades = future.result()
+                results_by_date[date] = (day_analysis, trades)
+            for date in trading_days:
+                day_analysis, trades = results_by_date.get(date, (None, []))
+                if day_analysis:
+                    daily_results.append(day_analysis)
+                    all_trades.extend(trades)
 
     if _client is not None:
         _fetch(_client)
@@ -396,12 +411,10 @@ def discover_targeted(tickers: list, dp_days: int = 3,
     print(f"Scanning {len(tickers)} tickers (targeted mode)...", file=sys.stderr)
 
     candidates = []
+    total = len(tickers)
 
     with UWClient() as client:
-        for i, ticker in enumerate(tickers, 1):
-            print(f"  [{i}/{len(tickers)}] {ticker}...", file=sys.stderr, end=" ", flush=True)
-
-            # Fetch per-ticker flow alerts
+        def _process_targeted(ticker):
             try:
                 resp = client.get_flow_alerts(ticker=ticker, min_premium=min_premium, limit=50)
                 alerts = resp.get("data", [])
@@ -413,12 +426,18 @@ def discover_targeted(tickers: list, dp_days: int = 3,
                 "sweeps": 0, "vol_oi_ratios": [], "sector": "", "issue_type": ""
             })
 
-            # Fetch dark pool data
             dp = fetch_darkpool_multi(ticker, days=dp_days, _client=client)
+            return _build_candidate(ticker, flow_data, dp)
 
-            candidate = _build_candidate(ticker, flow_data, dp)
-            print(f"Score: {candidate['score']}", file=sys.stderr)
-            candidates.append(candidate)
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            futures = {pool.submit(_process_targeted, t): t for t in tickers}
+            done = 0
+            for future in as_completed(futures):
+                done += 1
+                ticker = futures[future]
+                candidate = future.result()
+                print(f"  [{done}/{total}] {ticker}... Score: {candidate['score']}", file=sys.stderr)
+                candidates.append(candidate)
 
     candidates.sort(key=lambda x: x["score"], reverse=True)
 
@@ -478,14 +497,21 @@ def discover(min_premium: int = 500000, min_alerts: int = 1,
         print(f"  Checking {len(tickers_to_check)} candidates with DP data ({dp_days} days)...", file=sys.stderr)
 
         candidates = []
-        for i, ticker in enumerate(tickers_to_check, 1):
-            data = all_flow[ticker]
-            print(f"    [{i}/{len(tickers_to_check)}] {ticker}...", file=sys.stderr, end=" ", flush=True)
+        total = len(tickers_to_check)
 
+        def _process_candidate(ticker):
             dp = fetch_darkpool_multi(ticker, days=dp_days, _client=client)
-            candidate = _build_candidate(ticker, data, dp)
-            print(f"Score: {candidate['score']}", file=sys.stderr)
-            candidates.append(candidate)
+            return _build_candidate(ticker, all_flow[ticker], dp)
+
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            futures = {pool.submit(_process_candidate, t): t for t in tickers_to_check}
+            done = 0
+            for future in as_completed(futures):
+                done += 1
+                ticker = futures[future]
+                candidate = future.result()
+                print(f"    [{done}/{total}] {ticker}... Score: {candidate['score']}", file=sys.stderr)
+                candidates.append(candidate)
 
     # Sort by score descending
     candidates.sort(key=lambda x: x["score"], reverse=True)
