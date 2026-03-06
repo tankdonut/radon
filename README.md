@@ -105,8 +105,21 @@ convex-scavenger/
 │   ├── blotter.py                     # Trade blotter CLI wrapper
 │   ├── leap_iv_scanner.py             # LEAP IV scanner (via IB)
 │   ├── leap_scanner_uw.py             # LEAP scanner (via UW + Yahoo)
+│   ├── garch_convergence.py           # GARCH convergence vol divergence scanner
+│   ├── evaluate.py                    # Unified 7-milestone evaluation (parallel)
 │   ├── portfolio_report.py            # HTML portfolio report generator
-│   └── free_trade_analyzer.py         # Multi-leg "free trade" analysis
+│   ├── free_trade_analyzer.py         # Multi-leg "free trade" analysis
+│   └── context_constructor.py         # Persistent memory pipeline (Constructor + Evaluator)
+├── context/                           # Persistent memory (context engineering)
+│   ├── memory/
+│   │   ├── fact/                      # Atomic facts (trading lessons, API quirks)
+│   │   ├── episodic/                  # Session summaries
+│   │   ├── procedural/                # Tool definitions
+│   │   ├── user/                      # User preferences
+│   │   └── experiential/              # Action→outcome trajectories
+│   ├── human/                         # Human annotations (highest priority)
+│   ├── history/                       # Immutable transaction log
+│   └── metadata.json                  # Governance policies + token budget
 ├── data/                              # Runtime JSON data (gitignored)
 │   ├── portfolio.json                 # Open positions, bankroll, exposure
 │   ├── trade_log.json                 # Append-only executed trade journal
@@ -186,9 +199,88 @@ When used with Claude Code, the agent responds to these commands:
 | `blotter` | Today's fills + P&L |
 | `blotter-history` | Historical trades via Flex Query |
 | `leap-scan [TICKERS]` | LEAP IV mispricing opportunities |
+| `garch-convergence [PRESET]` | Cross-asset GARCH vol divergence scan |
 | `seasonal [TICKERS]` | Monthly seasonality assessment |
+| `free-trade` | Analyze positions for free trade opportunities |
 | `x-scan [@ACCOUNT]` | Extract ticker sentiment from X posts |
 | `analyst-ratings [TICKERS]` | Ratings, changes, price targets |
+
+## Evaluation Pipeline
+
+The `evaluate` command runs a full 7-milestone evaluation with parallel data fetching:
+
+```bash
+# Full evaluation (human-readable)
+python scripts/evaluate.py AAPL
+
+# JSON output
+python scripts/evaluate.py AAPL --json
+
+# Custom bankroll
+python scripts/evaluate.py AAPL --bankroll 1200000
+```
+
+The script fetches ticker info, seasonality, analyst ratings, dark pool flow, options flow, and OI changes **in parallel**, then runs edge determination sequentially. It stops at the first failing gate — no wasted API calls.
+
+If edge passes, you design the structure with live IB quotes (Milestone 5), run Kelly sizing (Milestone 6), and generate an HTML trade specification report for confirmation before execution.
+
+## Portfolio Report
+
+Self-contained HTML report with 8 sections — connects to IB, fetches live positions, fetches 5-day dark pool flow for all tickers (including today), and generates a styled report:
+
+```bash
+python scripts/portfolio_report.py           # Generate and open in browser
+python scripts/portfolio_report.py --no-open # Generate without opening
+```
+
+**8 sections:** Header, Data Freshness Banner, Summary Metrics (6 cards), Quick-Stat Badges, Attention Callouts, Thesis Check (with today-highlighted sparklines), All Positions Table, Dark Pool Flow Heatmap.
+
+**Today-highlighting:** Sparkline bars for today's data have a white outline ring, and "LIVE" tags mark real-time flow values. This makes it immediately visible whether today's flow confirms or breaks the pattern.
+
+## GARCH Convergence Scanner
+
+Identifies cross-asset volatility divergences using GARCH(1,1) models:
+
+```bash
+# Built-in presets
+python scripts/garch_convergence.py --preset semis
+python scripts/garch_convergence.py --preset mega-tech
+python scripts/garch_convergence.py --preset all
+
+# File presets (150 available in data/presets/)
+python scripts/garch_convergence.py --preset sp500-semiconductors
+python scripts/garch_convergence.py --preset ndx100-biotech
+
+# Ad-hoc ticker pairs
+python scripts/garch_convergence.py NVDA AMD GOOGL META
+```
+
+Parallel fetch with 8 workers (~3s for 23 tickers). Generates an HTML report at `reports/garch-convergence-{preset}-{date}.html`.
+
+## Persistent Memory (Context Engineering)
+
+File-system-based persistent memory across sessions, implementing the Constructor → Evaluator pipeline:
+
+```bash
+# View current persistent memory
+python scripts/context_constructor.py
+
+# Save a trading lesson
+python scripts/context_constructor.py --save-fact "trading.lesson.name" "Lesson content" \
+  --confidence 0.95 --source "evaluation-TICKER-DATE"
+
+# Save a session summary
+python scripts/context_constructor.py --save-episode "What happened this session" \
+  --session-id "session-2026-03-06"
+```
+
+**At startup**, the Constructor automatically loads all facts, episodic summaries, and human annotations into the agent's context (token-budgeted to 8000 tokens). Facts persist across sessions — the agent remembers trading lessons, API quirks, and portfolio state.
+
+**Memory types:**
+- `context/memory/fact/` — Atomic facts (permanent, deduplicated by key)
+- `context/memory/episodic/` — Session summaries (1-year retention)
+- `context/human/` — Human annotations (permanent, highest priority)
+- `context/history/` — Transaction log (append-only, all operations)
 
 ## CLI Tools
 
@@ -221,6 +313,21 @@ python scripts/blotter.py
 
 # LEAP scanner
 python scripts/leap_scanner_uw.py AAPL MSFT GOOGL
+
+# GARCH convergence scan
+python scripts/garch_convergence.py --preset semis
+
+# Full evaluation
+python scripts/evaluate.py GOOG
+
+# Generate portfolio report
+python scripts/portfolio_report.py
+
+# Free trade analysis
+python scripts/free_trade_analyzer.py --table
+
+# Save a persistent fact
+python scripts/context_constructor.py --save-fact "key" "value"
 ```
 
 ## Web Dashboard
@@ -239,11 +346,13 @@ Visit `http://localhost:3000`. The dashboard includes pages for scanner, portfol
 
 | Priority | Source | Notes |
 |----------|--------|-------|
-| **1** | Interactive Brokers (TWS/Gateway) | Real-time quotes, options chains |
-| **2** | Unusual Whales (`$UW_TOKEN`) | Dark pool flow, sweeps, flow alerts |
-| **3** | Yahoo Finance | Fallback only; delayed, rate-limited |
+| **1** | Interactive Brokers (TWS/Gateway) | Real-time quotes, options chains, fundamentals |
+| **2** | Unusual Whales (`$UW_TOKEN`) | Dark pool flow, sweeps, flow alerts, analyst ratings |
+| **3** | Exa (`$EXA_API_KEY`) | Web search, company research |
+| **4** | agent-browser | Interactive pages, JS-rendered content |
+| **5** | Yahoo Finance | **Absolute last resort** — delayed, rate-limited |
 
-Scripts automatically fall through this priority chain. Never skip to Yahoo without trying IB and UW first.
+Scripts automatically fall through this priority chain. Yahoo Finance is never used if any higher-priority source is available.
 
 ## Data Files
 
@@ -254,6 +363,10 @@ Scripts automatically fall through this priority chain. Never skip to Yahoo with
 | `data/orders.json` | Current open IB orders |
 | `data/watchlist.json` | Tickers under surveillance with sector tags |
 | `data/reconciliation.json` | IB fill reconciliation results |
+| `data/presets/` | 150 strategy-agnostic ticker presets (SP500, NDX100, R2K) |
+| `context/memory/fact/` | Persistent facts (trading lessons, API quirks) |
+| `context/memory/episodic/` | Session summaries |
+| `context/metadata.json` | Governance policies + token budget allocation |
 
 ## Testing
 
@@ -270,14 +383,24 @@ All tests use mocked API calls — no live IB or UW connections required.
 
 ## Background Services
 
-Two background daemons can be configured via launchd (macOS):
+Background daemons configurable via launchd (macOS):
 
 | Service | Purpose |
 |---------|---------|
+| `monitor_daemon/` | Pluggable daemon: fill monitoring, exit order placement, preset rebalancing |
 | `exit_order_service.py` | Monitors `PENDING_MANUAL` positions, places exit orders when IB accepts |
-| `monitor_daemon/` | Pluggable daemon with fill monitoring and exit order handlers |
 
 launchd plists are in `config/`.
+
+### Startup Protocol
+
+When the agent starts, the startup extension automatically:
+1. Checks market hours (9:30 AM – 4:00 PM ET)
+2. Loads project docs + persistent memory from `context/`
+3. Runs IB reconciliation (detects new trades, closed positions)
+4. Runs free trade analysis (waits for IB sync to complete)
+5. Checks monitor daemon status
+6. Scans X accounts for ticker sentiment (parallel)
 
 ## Discovery Scoring (0-100)
 

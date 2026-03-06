@@ -1,9 +1,13 @@
 # Status & Decision Log
 
 ## Last Updated
-2026-03-05T12:00:00-08:00
+2026-03-06T09:50:00-08:00
 
 ## Recent Commits
+- 2026-03-06 09:47:00 -0800 — **feat: Context engineering pipeline — persistent memory across sessions (Constructor + Evaluator, 7 facts seeded, auto-loads at startup)**
+- 2026-03-06 09:32:00 -0800 — fix: Move undefined risk table above equity positions on portfolio page
+- 2026-03-06 09:28:00 -0800 — **feat: Portfolio report — self-contained IB + dark pool fetch, today-highlighted sparklines, HTML template**
+- 2026-03-06 09:28:00 -0800 — docs: SKILL.md Generation Checklist — added Trade Specification (16 steps) and Portfolio Report (10 steps)
 - 2026-03-05 12:00:00 -0800 — **feat: GARCH Convergence scanner — parallel fetch (8 workers, ~2.6s for 23 tickers), divergence analysis, HTML report**
 - 2026-03-05 11:47:00 -0800 — Route evaluate command to python script: explicit instructions in AGENTS.md and plans.md
 - 2026-03-05 11:22:00 -0800 — **feat: Improved RatingsTab — maps nested UW API response, shows buy/sell %, distribution bar, price targets with upside/downside, analyst actions with firm/grade**
@@ -341,6 +345,7 @@ Click any ticker across all 6 table sections → 720px modal with:
 |--------|---------|
 | `clients/ib_client.py` | **IBClient** — Primary IB API client |
 | `clients/uw_client.py` | **UWClient** — Primary UW API client |
+| `evaluate.py` | **⭐ Unified 7-milestone evaluation (parallel fetch, auto-stops)** |
 | `fetch_oi_changes.py` | **⭐ OI change analysis (REQUIRED in every eval)** |
 | `verify_options_oi.py` | Verify specific OI claims |
 | `ib_reconcile.py` | Startup reconciliation (async) |
@@ -352,24 +357,37 @@ Click any ticker across all 6 table sections → 720px modal with:
 | `blotter.py` | Today's fills and P&L |
 | `trade_blotter/flex_query.py` | Historical trades (365 days) |
 | `garch_convergence.py` | **⭐ GARCH Convergence scanner (parallel, ~3s for 23 tickers)** |
+| `portfolio_report.py` | **⭐ Self-contained portfolio HTML report (IB + DP flow + thesis check)** |
+| `context_constructor.py` | **⭐ Persistent memory: Constructor (auto-load) + Evaluator (save facts/episodes)** |
 
 ### Skills
 | Skill | Purpose |
 |-------|---------|
 | `ib-order-execution` | Order placement and fill monitoring |
-| `html-report` | Trade specification + P&L templates |
+| `html-report` | Trade specification + P&L + Portfolio templates |
+| `context-engineering` | Persistent memory architecture (always-on) |
 
 ### Services
 | Service | Status | Description |
 |---------|--------|-------------|
-| Exit Order Service | 🟢 Installing | Places pending target orders when IB accepts |
-| IB Reconciliation | 🟢 Active | Runs at Pi startup |
+| Monitor Daemon | 🟢 Active | Fill monitoring, exit order placement, preset rebalancing |
+| IB Reconciliation | 🟢 Active | Runs at Pi startup (async) |
+| Context Constructor | 🟢 Active | Loads persistent memory at Pi startup (sync) |
 
 ### Templates
 | Template | Purpose |
 |----------|---------|
-| `trade-specification-template.html` | Full evaluation report (NEW) |
+| `trade-specification-template.html` | Full evaluation report |
 | `pnl-template.html` | P&L reconciliation report |
+| `portfolio-template.html` | **Portfolio report with today-highlighted sparklines (NEW)** |
+
+### Persistent Memory
+| Directory | Count | Purpose |
+|-----------|-------|---------|
+| `context/memory/fact/` | 7 | Trading lessons, API quirks, portfolio state |
+| `context/memory/episodic/` | 1 | Session summaries |
+| `context/human/` | 0 | Human annotations (overrides) |
+| Token budget | 558/8000 | 7% utilization |
 
 ---
 
@@ -422,6 +440,12 @@ Click any ticker across all 6 table sections → 720px modal with:
 - [x] **Data normalization: canonical "ticker" key in all data files**
 - [x] **evaluate.py unified evaluation script with 34 TDD tests**
 - [x] **garch_convergence.py — parallel GARCH convergence scanner (8 workers, built-in + file presets, HTML report)**
+- [x] **Portfolio report: self-contained script (IB + DP flow + HTML template with today-highlighting)**
+- [x] **Portfolio template: `.pi/skills/html-report/portfolio-template.html` with 13 placeholders**
+- [x] **SKILL.md Generation Checklist: Trade Specification (16 steps) + Portfolio Report (10 steps)**
+- [x] **Web: undefined risk table moved above equity positions on portfolio page**
+- [x] **Context engineering: `context_constructor.py` — Constructor + Evaluator pipeline, auto-loads at startup**
+- [x] **Seeded 7 persistent facts from evaluation history + 1 episodic summary**
 - [ ] Execute MSFT LEAP call trade (pending confirmation)
 - [ ] Close undefined risk positions before Friday expiry
 - [ ] Review PLTR for profit-taking (23 DTE, +175%)

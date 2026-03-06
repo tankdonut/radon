@@ -114,14 +114,24 @@ If a script fails:
 ### Portfolio Commands
 | Action | Command |
 |--------|---------|
-| **Generate portfolio report** | `python3 scripts/portfolio_report.py` |
-| Portfolio report (sync first) | `python3 scripts/portfolio_report.py --sync` |
+| **⭐ Generate portfolio report** | `python3 scripts/portfolio_report.py` (self-contained: IB + DP flow + HTML) |
+| Portfolio report (no browser) | `python3 scripts/portfolio_report.py --no-open` |
+| Free trade analysis | `python3 scripts/free_trade_analyzer.py --table` |
 | Sync IB portfolio | `python3 scripts/ib_sync.py --sync` |
 | Run reconciliation | `python3 scripts/ib_reconcile.py` |
 | View today's fills | `python3 scripts/blotter.py` |
 | Fetch historical trades | `python3 scripts/trade_blotter/flex_query.py --symbol [TICKER]` |
 | Start realtime server | `node scripts/ib_realtime_server.js` |
 | Validate JSON | `python3 -m json.tool data/[file].json` |
+
+### Context Engineering Commands
+| Action | Command |
+|--------|---------|
+| **View persistent memory** | `python3 scripts/context_constructor.py` |
+| View as JSON | `python3 scripts/context_constructor.py --json` |
+| View manifest only | `python3 scripts/context_constructor.py --manifest-only` |
+| **Save a fact** | `python3 scripts/context_constructor.py --save-fact "key" "value" --confidence 0.95 --source "source"` |
+| **Save session episode** | `python3 scripts/context_constructor.py --save-episode "summary" --session-id "id"` |
 
 ### Order Execution Commands
 
@@ -383,3 +393,8 @@ cat data/reconciliation.json | python3 -m json.tool
 | `data/watchlist.json` | Tickers under surveillance |
 | `data/ticker_cache.json` | Ticker → company name cache |
 | `data/analyst_ratings_cache.json` | Cached analyst data |
+| `context/memory/fact/` | Persistent facts (trading lessons, API quirks, portfolio state) |
+| `context/memory/episodic/` | Session summaries |
+| `context/human/` | Human annotations (overrides model output) |
+| `context/history/_transactions.jsonl` | All context read/write operations |
+| `context/metadata.json` | Governance policies + token budget |
