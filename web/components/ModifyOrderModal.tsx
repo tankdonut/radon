@@ -5,7 +5,7 @@ import type { OpenOrder } from "@/lib/types";
 import type { PriceData } from "@/lib/pricesProtocol";
 import { optionKey } from "@/lib/pricesProtocol";
 import Modal from "./Modal";
-import { fmtPrice } from "./WorkspaceSections";
+import { fmtPrice } from "@/lib/positionUtils";
 
 type ModifyOrderModalProps = {
   order: OpenOrder | null;

@@ -1,7 +1,7 @@
 # Status & Decision Log
 
 ## Last Updated
-2026-03-06T09:50:00-08:00
+2026-03-06T11:48:00-08:00
 
 ## Recent Commits
 - 2026-03-06 09:47:00 -0800 — **feat: Context engineering pipeline — persistent memory across sessions (Constructor + Evaluator, 7 facts seeded, auto-loads at startup)**
@@ -39,22 +39,20 @@
 - 2026-03-04 07:00:00 -0800 — Created ib_fill_monitor.py and ib-order-execution skill
 
 ## Current Portfolio State
-- **Net Liquidation**: $1,201,929
-- **Deployed**: $1,267,897 (105% — on margin)
-- **Open Positions**: 23
-- **Defined Risk**: 13 positions
-- **Undefined Risk**: 10 positions (7 stocks + 2 risk reversals + 1 synthetic)
-- **Today's Realized P&L**: +$53,082
+- **Net Liquidation**: $1,194,810
+- **Open Positions**: 39 (per IB sync)
+- **Defined Risk**: Spreads (AAOI, AAPL, BKD, BRZE x2, GOOG, PLTR, TMUS), LEAPs (ALAB, AMD, SOFI, WULF), Long options (BAP, ETHA, IGV)
+- **Undefined Risk**: Risk reversals (APO, EWY Mar 13, IWM), Synthetic (IGV), Equities (EC, ILF, MSFT, NAK, RR, TSLL, URTY, USAX)
+- **Today's Realized P&L**: +$6,513 (AAOI call sale)
 
-## Today's Trades (2026-03-04)
+## Today's Trades (2026-03-06)
 | Trade | Structure | P&L | Status |
 |-------|-----------|-----|--------|
-| GOOG | Bull Call Spread $315/$340 | -$1,040 (open) | ✓ FILLED @ $6.26 |
-| PLTR | Sold 100 Calls @ $9.18 | +$48,480 | ✓ CLOSED |
-| EWY | Closed Mar 6 Risk Reversal | +$9,888 | ✓ CLOSED |
-| BRZE | Closed Options Structure | -$11,287 | ✓ CLOSED (loss) |
-| AAOI | Bought back $90 Put @ $1.25 | +$6,001 | ✓ FREED (call now free) |
-| **Net P&L Today** | | **+$53,082** | |
+| IWM | Risk Reversal P$248/C$259 Apr 17 (6 contracts) | — (open) | ✓ FILLED |
+| AAOI | Sold 25x Mar 6 $105 Call @ $5.25 | +$6,513 | ✓ CLOSED |
+| APO | Risk Reversal P$100/C$115 Apr 17 (25 contracts) | — (open) | ✓ FILLED |
+| TMUS | Bull Call Spread $230/$250 Apr 17 (100 contracts) | — (open) | ✓ FILLED |
+| **Net Realized P&L Today** | | **+$6,513** | |
 
 ## Positions Requiring Attention
 
@@ -83,6 +81,8 @@
 | EWY Risk Reversal (Mar 13) | Undefined risk (short put $130) | 2026-03-04 | ⚠️ ACTIVE |
 | IGV Synthetic Long | Undefined risk (short put $90) | Active | ⚠️ ACTIVE |
 | AMD Long Call | Position size 7.4% (exceeds 2.5% cap) | 2026-03-03 | ⚠️ ACTIVE |
+| APO Risk Reversal | Undefined risk (short put $100) | 2026-03-06 | ⚠️ ACTIVE |
+| IWM Risk Reversal | Undefined risk (short put $248) | 2026-03-06 | ⚠️ ACTIVE |
 
 ---
 
@@ -102,6 +102,10 @@
 | **11** | **03-04** | **EWY** | **Closed Mar 6 RR** | **CLOSED** | **+$9,888** |
 | **12** | **03-04** | **BRZE** | **Closed Structure** | **CLOSED** | **-$11,287** |
 | **13** | **03-04** | **AAOI** | **Risk Reversal → Free Call** | **FREED** | **+$6,001** |
+| **16** | **03-05** | **AAOI** | **Bull Call Spread $105/$130 (Mar 20, 100x)** | **OPEN** | — |
+| **17** | **03-06** | **AAOI** | **Sold Mar 6 $105C (25x @ $5.25)** | **CLOSED** | **+$6,513** |
+| **18** | **03-06** | **APO** | **Risk Reversal P$100/C$115 (Apr 17, 25x)** | **OPEN** | — |
+| **19** | **03-06** | **TMUS** | **Bull Call Spread $230/$250 (Apr 17, 100x)** | **OPEN** | — |
 
 ---
 

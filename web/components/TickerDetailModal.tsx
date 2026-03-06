@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 import type { OpenOrder, PortfolioPosition } from "@/lib/types";
 import type { PriceData } from "@/lib/pricesProtocol";
 import { useTickerDetail } from "@/lib/TickerDetailContext";
-import { fmtPrice, legPriceKey } from "@/components/WorkspaceSections";
+import { fmtPrice, legPriceKey } from "@/lib/positionUtils";
 import Modal from "./Modal";
 import PositionTab from "./ticker-detail/PositionTab";
 import OrderTab from "./ticker-detail/OrderTab";

@@ -97,6 +97,15 @@ def classify_position(pos: dict, flow_data: dict, analysis: dict) -> dict:
     else:
         category = "neutral"
 
+    # Extract daily buy_ratio series (oldest → newest)
+    daily_buy_ratios = []
+    dp_daily = flow_data.get("dark_pool", {}).get("daily", [])
+    for day in sorted(dp_daily, key=lambda d: d.get("date", "")):
+        daily_buy_ratios.append({
+            "date": day.get("date", ""),
+            "buy_ratio": day.get("dp_buy_ratio"),
+        })
+
     return {
         "ticker": ticker,
         "position": structure,
@@ -106,6 +115,7 @@ def classify_position(pos: dict, flow_data: dict, analysis: dict) -> dict:
         "flow_class": flow_class,
         "strength": round(strength, 1),
         "buy_ratio": buy_ratio,
+        "daily_buy_ratios": daily_buy_ratios,
         "note": note,
         "category": category,
     }

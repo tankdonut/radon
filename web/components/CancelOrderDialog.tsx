@@ -2,7 +2,7 @@
 
 import type { OpenOrder } from "@/lib/types";
 import Modal from "./Modal";
-import { fmtPrice } from "./WorkspaceSections";
+import { fmtPrice } from "@/lib/positionUtils";
 
 type CancelOrderDialogProps = {
   order: OpenOrder | null;

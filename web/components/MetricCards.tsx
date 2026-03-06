@@ -1,11 +1,12 @@
 import type { PortfolioData } from "@/lib/types";
 import type { PriceData } from "@/lib/pricesProtocol";
-import { legPriceKey } from "@/components/WorkspaceSections";
+import { legPriceKey } from "@/lib/positionUtils";
 
 type MetricCardsProps = {
   portfolio: PortfolioData | null;
   prices?: Record<string, PriceData>;
   realizedPnl?: number;
+  section?: string;
 };
 
 const fmt = (n: number) =>
@@ -73,8 +74,10 @@ function computeTodayUnrealizedPnl(
   return { pnl, positionsWithData, totalPositions };
 }
 
-export default function MetricCards({ portfolio, prices, realizedPnl }: MetricCardsProps) {
+export default function MetricCards({ portfolio, prices, realizedPnl, section }: MetricCardsProps) {
+  const isPortfolio = section === "portfolio";
   if (!portfolio) {
+    if (!isPortfolio) return null;
     const placeholders = ["Net Liquidation", "Positions", "Deployed", "Open P&L"];
     return (
       <>
@@ -133,6 +136,8 @@ export default function MetricCards({ portfolio, prices, realizedPnl }: MetricCa
   const unrealized = todayUnrealized?.pnl ?? 0;
   const realized = realizedPnl ?? 0;
   const total = unrealized + realized;
+
+  if (!isPortfolio) return null;
 
   return (
     <>

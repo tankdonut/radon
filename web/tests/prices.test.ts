@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { PortfolioPosition } from "../lib/types";
 import { normalizeSymbolList, symbolKey } from "../lib/pricesProtocol";
-import { fmtPriceOrCalculated, getLastPriceIsCalculated } from "../components/WorkspaceSections";
+import { fmtPriceOrCalculated, getLastPriceIsCalculated } from "../lib/positionUtils";
 
 /**
  * Tests for real-time price functionality.

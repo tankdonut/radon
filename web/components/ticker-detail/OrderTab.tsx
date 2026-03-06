@@ -6,7 +6,7 @@ import type { OpenOrder, PortfolioPosition } from "@/lib/types";
 import type { PriceData } from "@/lib/pricesProtocol";
 import { optionKey } from "@/lib/pricesProtocol";
 import { useOrderActions } from "@/lib/OrderActionsContext";
-import { fmtPrice, legPriceKey } from "@/components/WorkspaceSections";
+import { fmtPrice, legPriceKey } from "@/lib/positionUtils";
 
 type OrderTabProps = {
   ticker: string;

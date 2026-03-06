@@ -285,6 +285,7 @@ export type FlowAnalysisPosition = {
   flow_class: string;
   strength: number;
   buy_ratio: number | null;
+  daily_buy_ratios?: { date: string; buy_ratio: number | null }[];
   note: string;
 };
 

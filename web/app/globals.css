@@ -577,6 +577,33 @@ tr:last-child td {
   margin-top: 4px;
 }
 
+.flow-sparkline {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 2px;
+  height: 28px;
+}
+
+.flow-spark-bar {
+  width: 6px;
+  min-height: 2px;
+  transition: height 400ms var(--ease-out);
+}
+
+.flow-spark-bar.accum {
+  background: var(--positive);
+}
+
+.flow-spark-bar.distrib {
+  background: var(--negative);
+}
+
+.flow-spark-bar.neutral {
+  background: var(--text-muted);
+  opacity: 0.5;
+}
+
 .alert-box {
   padding: 16px;
   border-left: 2px solid var(--negative);

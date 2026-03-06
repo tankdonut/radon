@@ -209,7 +209,7 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
         <div className="content">
           {activeSection === "dashboard" ? <ChatPanel activeSection={activeSection} /> : null}
 
-          {activeSection !== "dashboard" ? <MetricCards portfolio={portfolio} prices={prices} realizedPnl={blotterData?.summary.realized_pnl ?? 0} /> : null}
+          {activeSection !== "dashboard" ? <MetricCards portfolio={portfolio} prices={prices} realizedPnl={blotterData?.summary.realized_pnl ?? 0} section={activeSection} /> : null}
 
           {activeSection !== "dashboard" ? (
             <WorkspaceSections section={activeSection} portfolio={portfolio} orders={orders} prices={prices} />

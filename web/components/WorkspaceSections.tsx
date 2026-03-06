@@ -18,8 +18,8 @@ import {
   Wrench,
   XCircle,
 } from "lucide-react";
-import type { BlotterTrade, ExecutedOrder, FlowAnalysisPosition, OpenOrder, OrdersData, PortfolioData, PortfolioPosition, ScannerSignal, WorkspaceSection } from "@/lib/types";
-import { useOrderActions, type CancelledOrder } from "@/lib/OrderActionsContext";
+import type { BlotterTrade, ExecutedOrder, FlowAnalysisPosition, OpenOrder, OrdersData, PortfolioData, ScannerSignal, WorkspaceSection } from "@/lib/types";
+import { useOrderActions } from "@/lib/OrderActionsContext";
 import type { PriceData } from "@/lib/pricesProtocol";
 import { optionKey } from "@/lib/pricesProtocol";
 import { useJournal } from "@/lib/useJournal";
@@ -29,8 +29,26 @@ import { useScanner } from "@/lib/useScanner";
 import { useBlotter } from "@/lib/useBlotter";
 import { useSort, type SortDirection } from "@/lib/useSort";
 import { useTickerDetail } from "@/lib/TickerDetailContext";
+import { fmtPrice, fmtUsd, legPriceKey } from "@/lib/positionUtils";
+import PositionTable from "./PositionTable";
 import CancelOrderDialog from "./CancelOrderDialog";
 import ModifyOrderModal from "./ModifyOrderModal";
+
+/* ─── Re-exports for backward compat ──────────────────── */
+
+export {
+  fmtUsd,
+  fmtPrice,
+  fmtPriceOrCalculated,
+  resolveMarketValue,
+  resolveEntryCost,
+  getAvgEntry,
+  getMultiplier,
+  getLastPriceIsCalculated,
+  legPriceKey,
+  getOptionDailyChg,
+  getLastPrice,
+} from "@/lib/positionUtils";
 
 /* ─── Ticker link (clickable) ──────────────────────────── */
 
@@ -89,6 +107,48 @@ function SortTh<K extends string>({
   );
 }
 
+/* ─── Price direction hook (local, used by OrderPriceCell) ── */
+
+function usePriceDirection(price: number | null): {
+  direction: "up" | "down" | null;
+  flashDirection: "up" | "down" | null;
+} {
+  const [direction, setDirection] = useState<"up" | "down" | null>(null);
+  const [flashDirection, setFlashDirection] = useState<"up" | "down" | null>(null);
+  const previousPrice = useRef<number | null>(null);
+
+  useEffect(() => {
+    const previous = previousPrice.current;
+
+    if (previous == null || price == null) {
+      setDirection(null);
+      setFlashDirection(null);
+      previousPrice.current = price;
+      return undefined;
+    }
+
+    if (price > previous) {
+      setDirection("up");
+      setFlashDirection("up");
+    } else if (price < previous) {
+      setDirection("down");
+      setFlashDirection("down");
+    } else {
+      setFlashDirection(null);
+    }
+
+    previousPrice.current = price;
+
+    if (price !== previous) {
+      const timer = setTimeout(() => setFlashDirection(null), 2500);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [price]);
+
+  return { direction, flashDirection };
+}
+
 /* ─── Flow tables ───────────────────────────────────────── */
 
 type FlowPosKey = "ticker" | "position" | "flow_label" | "strength" | "note";
@@ -97,6 +157,22 @@ const flowPosExtract = (item: FlowAnalysisPosition, key: FlowPosKey): string | n
   if (key === "strength") return item.strength;
   return item[key];
 };
+
+function FlowSparkline({ ratios }: { ratios?: { date: string; buy_ratio: number | null }[] }) {
+  if (!ratios || ratios.length === 0) return <div className="strength-value">---</div>;
+  const maxH = 28;
+  return (
+    <div className="flow-sparkline">
+      {ratios.map((d, i) => {
+        const r = d.buy_ratio;
+        if (r == null) return <div key={i} className="flow-spark-bar neutral" style={{ height: 2 }} />;
+        const cls = r >= 0.55 ? "accum" : r <= 0.45 ? "distrib" : "neutral";
+        const h = Math.max(2, Math.round(r * maxH));
+        return <div key={i} className={`flow-spark-bar ${cls}`} style={{ height: h }} title={`${d.date}: ${Math.round(r * 100)}%`} />;
+      })}
+    </div>
+  );
+}
 
 function FlowTable({ rows, lastColumn }: { rows: FlowAnalysisPosition[]; lastColumn: string }) {
   const { sorted, sort, toggle } = useSort(rows, flowPosExtract);
@@ -113,14 +189,12 @@ function FlowTable({ rows, lastColumn }: { rows: FlowAnalysisPosition[]; lastCol
       </thead>
       <tbody>
         {sorted.map((item) => (
-          <tr key={item.ticker}>
+          <tr key={`${item.ticker}-${item.position}`}>
             <td><TickerLink ticker={item.ticker} /></td>
             <td>{item.position}</td>
             <td><span className={`pill ${item.flow_class}`}>{item.flow_label}</span></td>
             <td>
-              <div className="strength-bar">
-                <div className="strength-fill" style={{ width: `${Math.min(item.strength, 100)}%` }} />
-              </div>
+              <FlowSparkline ratios={item.daily_buy_ratios} />
               <div className="strength-value">{item.strength}</div>
             </td>
             <td>{item.note}</td>
@@ -153,7 +227,7 @@ function FlowSections() {
               ACTION ITEMS
             </div>
             {actionItems.map((item) => (
-              <div key={item.ticker} className="alert-item">
+              <div key={`${item.ticker}-${item.position}`} className="alert-item">
                 <span className="alert-ticker">{item.ticker}</span> — {item.position}: {item.note}
               </div>
             ))}
@@ -210,39 +284,37 @@ function FlowSections() {
         </div>
       </div>
 
-      <div className="two-col">
-        <div className="section">
-          <div className="section-header">
-            <div className="section-title">
-              <Bell size={14} />
-              Watch Closely
-            </div>
-            <span className="pill undefined">{watchArr.length} POSITIONS</span>
+      <div className="section">
+        <div className="section-header">
+          <div className="section-title">
+            <Circle size={14} />
+            Neutral / Low Signal
           </div>
-          <div className="section-body">
-            {watchArr.length > 0 ? (
-              <FlowTable rows={watchArr} lastColumn="Note" />
-            ) : (
-              <div className="alert-item">No watch items</div>
-            )}
-          </div>
+          <span className="pill neutral">{neutralArr.length} POSITIONS</span>
         </div>
+        <div className="section-body">
+          {neutralArr.length > 0 ? (
+            <FlowTable rows={neutralArr} lastColumn="Note" />
+          ) : (
+            <div className="alert-item">No neutral positions</div>
+          )}
+        </div>
+      </div>
 
-        <div className="section">
-          <div className="section-header">
-            <div className="section-title">
-              <Circle size={14} />
-              Neutral / Low Signal
-            </div>
-            <span className="pill neutral">{neutralArr.length} POSITIONS</span>
+      <div className="section">
+        <div className="section-header">
+          <div className="section-title">
+            <Bell size={14} />
+            Watch Closely
           </div>
-          <div className="section-body">
-            {neutralArr.length > 0 ? (
-              <FlowTable rows={neutralArr} lastColumn="Note" />
-            ) : (
-              <div className="alert-item">No neutral positions</div>
-            )}
-          </div>
+          <span className="pill undefined">{watchArr.length} POSITIONS</span>
+        </div>
+        <div className="section-body">
+          {watchArr.length > 0 ? (
+            <FlowTable rows={watchArr} lastColumn="Note" />
+          ) : (
+            <div className="alert-item">No watch items</div>
+          )}
         </div>
       </div>
 
@@ -257,413 +329,7 @@ function FlowSections() {
   );
 }
 
-/* ─── Portfolio tables ──────────────────────────────────── */
-
-export const fmtUsd = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-export const fmtPrice = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-export const fmtPriceOrCalculated = (n: number, isCalculated: boolean) => isCalculated ? `C${fmtPrice(n)}` : fmtPrice(n);
-
-export function resolveMarketValue(pos: PortfolioPosition): number | null {
-  // For multi-leg positions, always recompute sign-aware from legs
-  if (pos.legs.length > 1) {
-    const known = pos.legs.filter((l) => l.market_value != null);
-    if (known.length === 0) return null;
-    return known.reduce((s, l) => {
-      const sign = l.direction === "LONG" ? 1 : -1;
-      return s + sign * Math.abs(l.market_value!);
-    }, 0);
-  }
-  if (pos.market_value != null) return pos.market_value;
-  const single = pos.legs[0];
-  return single?.market_value ?? null;
-}
-
-export function getMultiplier(pos: PortfolioPosition): number {
-  return pos.structure_type === "Stock" ? 1 : 100;
-}
-
-export function resolveEntryCost(pos: PortfolioPosition): number {
-  if (pos.legs.length > 1) {
-    return pos.legs.reduce((s, l) => {
-      const sign = l.direction === "LONG" ? 1 : -1;
-      return s + sign * Math.abs(l.entry_cost);
-    }, 0);
-  }
-  return pos.entry_cost;
-}
-
-export function getAvgEntry(pos: PortfolioPosition): number {
-  const mult = getMultiplier(pos);
-  return resolveEntryCost(pos) / (pos.contracts * mult);
-}
-
-function getLastPrice(pos: PortfolioPosition): number | null {
-  const mv = resolveMarketValue(pos);
-  if (mv == null) return null;
-  const mult = getMultiplier(pos);
-  return mv / (pos.contracts * mult);
-}
-
-export function getLastPriceIsCalculated(pos: PortfolioPosition): boolean {
-  if (pos.market_price_is_calculated != null) return pos.market_price_is_calculated;
-  if (pos.legs.length === 1) {
-    return Boolean(pos.legs[0]?.market_price_is_calculated);
-  }
-  return pos.legs.some((leg) => Boolean(leg.market_price_is_calculated));
-}
-
-function usePriceDirection(price: number | null): {
-  direction: "up" | "down" | null;
-  flashDirection: "up" | "down" | null;
-} {
-  const [direction, setDirection] = useState<"up" | "down" | null>(null);
-  const [flashDirection, setFlashDirection] = useState<"up" | "down" | null>(null);
-  const previousPrice = useRef<number | null>(null);
-
-  useEffect(() => {
-    const previous = previousPrice.current;
-
-    if (previous == null || price == null) {
-      setDirection(null);
-      setFlashDirection(null);
-      previousPrice.current = price;
-      return undefined;
-    }
-
-    if (price > previous) {
-      setDirection("up");
-      setFlashDirection("up");
-    } else if (price < previous) {
-      setDirection("down");
-      setFlashDirection("down");
-    } else {
-      setFlashDirection(null);
-    }
-
-    previousPrice.current = price;
-
-    if (price !== previous) {
-      const timer = setTimeout(() => setFlashDirection(null), 2500);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [price]);
-
-  return { direction, flashDirection };
-}
-
-/**
- * Build a composite price key for a leg within a position.
- * Returns null for Stock legs or missing data.
- */
-export function legPriceKey(
-  ticker: string,
-  expiry: string,
-  leg: { type: string; strike: number | null },
-): string | null {
-  if (leg.type === "Stock") return null;
-  if (leg.strike == null || leg.strike === 0) return null;
-  if (!expiry || expiry === "N/A") return null;
-  const right = leg.type === "Call" ? "C" : leg.type === "Put" ? "P" : null;
-  if (!right) return null;
-  const expiryClean = expiry.replace(/-/g, "");
-  if (expiryClean.length !== 8) return null;
-  return optionKey({ symbol: ticker.toUpperCase(), expiry: expiryClean, strike: leg.strike, right });
-}
-
-function LegRow({
-  leg,
-  showExpiry,
-  showUnderlying,
-  realtimeLegPrice,
-}: {
-  leg: PortfolioPosition["legs"][number];
-  showExpiry: boolean;
-  showUnderlying?: boolean;
-  realtimeLegPrice?: PriceData | null;
-}) {
-  const rtLast = realtimeLegPrice?.last != null && realtimeLegPrice.last > 0 ? realtimeLegPrice.last : null;
-  const marketPrice = rtLast ?? (leg.market_price != null ? Math.abs(leg.market_price) : null);
-  const isCalculated = rtLast != null ? Boolean(realtimeLegPrice?.lastIsCalculated) : Boolean(leg.market_price_is_calculated);
-  const { direction: priceDirection, flashDirection } = usePriceDirection(marketPrice);
-
-  return (
-    <tr className={flashDirection ? `last-price-${flashDirection}` : undefined}>
-      <td></td>
-      <td colSpan={3} className="cell-indent cell-muted">
-        {leg.direction} {leg.contracts}x {leg.type}{leg.strike ? ` $${leg.strike}` : ""}
-      </td>
-      {showUnderlying && <td></td>}
-      <td className="right cell-muted">{fmtPrice(Math.abs(leg.avg_cost) / (leg.type === "Stock" ? 1 : 100))}</td>
-      <td className="right last-price-cell">
-        {marketPrice != null ? fmtPriceOrCalculated(marketPrice, isCalculated) : "—"}
-        {priceDirection === "up" && <ArrowUp size={11} className="price-trend-icon price-trend-up" aria-label="price up" />}
-        {priceDirection === "down" && <ArrowDown size={11} className="price-trend-icon price-trend-down" aria-label="price down" />}
-      </td>
-      <td></td>
-      <td></td>
-      <td className="right cell-muted">{fmtPrice(Math.abs(leg.entry_cost))}</td>
-      <td className="right cell-muted">{rtLast != null ? fmtUsd(rtLast * leg.contracts * (leg.type === "Stock" ? 1 : 100)) : leg.market_value != null ? fmtUsd(Math.abs(leg.market_value)) : "—"}</td>
-      <td></td>
-      {showExpiry && <td></td>}
-    </tr>
-  );
-}
-
-function getDailyChange(realtimePrice?: PriceData | null): number | null {
-  if (!realtimePrice) return null;
-  const { last, close } = realtimePrice;
-  if (last == null || last <= 0 || close == null || close <= 0) return null;
-  return ((last - close) / close) * 100;
-}
-
-function PositionRow({ pos, showExpiry = true, showStrike = false, showUnderlying = false, realtimePrice, prices }: { pos: PortfolioPosition; showExpiry?: boolean; showStrike?: boolean; showUnderlying?: boolean; realtimePrice?: PriceData | null; prices?: Record<string, PriceData> }) {
-  const [legsExpanded, setLegsExpanded] = useState(false);
-  const hasMultipleLegs = pos.legs.length > 1;
-
-  // For stock positions, prefer the real-time WS price over the stale sync price
-  const isStock = pos.structure_type === "Stock";
-  const rtLast = isStock && realtimePrice?.last != null && realtimePrice.last > 0 ? realtimePrice.last : null;
-
-  // For options: compute real-time MV and daily change from leg-level WS prices
-  const optionsRt = useMemo(() => {
-    if (isStock || !prices) return null;
-    let allLegsHavePrices = true;
-    let rtMv = 0;
-    let rtDailyPnl = 0;
-    let rtCloseValue = 0;
-    for (const leg of pos.legs) {
-      const key = legPriceKey(pos.ticker, pos.expiry, leg);
-      const lp = key ? prices[key] : null;
-      if (!lp || lp.last == null || lp.last <= 0) {
-        allLegsHavePrices = false;
-        break;
-      }
-      const sign = leg.direction === "LONG" ? 1 : -1;
-      rtMv += sign * lp.last * leg.contracts * 100;
-      if (lp.close != null && lp.close > 0) {
-        rtDailyPnl += sign * (lp.last - lp.close) * leg.contracts * 100;
-        rtCloseValue += sign * lp.close * leg.contracts * 100;
-      }
-    }
-    if (!allLegsHavePrices) return null;
-    return { mv: rtMv, dailyPnl: rtDailyPnl, closeValue: rtCloseValue };
-  }, [isStock, prices, pos.legs, pos.ticker, pos.expiry]);
-
-  const mv = rtLast != null ? rtLast * pos.contracts : optionsRt?.mv ?? resolveMarketValue(pos);
-  const entryCost = resolveEntryCost(pos);
-  const pnl = mv != null ? mv - entryCost : null;
-  const pnlPct = pnl != null && entryCost !== 0 ? (pnl / Math.abs(entryCost)) * 100 : null;
-  const avgEntry = getAvgEntry(pos);
-  const lastPrice = rtLast ?? (optionsRt ? mv! / (pos.contracts * getMultiplier(pos)) : getLastPrice(pos));
-  const lastPriceIsCalculated = rtLast != null || optionsRt != null ? false : getLastPriceIsCalculated(pos);
-  const { direction: priceDirection, flashDirection } = usePriceDirection(lastPrice);
-  // Stock: daily change from underlying WS price
-  // Options: daily change from leg-level WS prices as % of yesterday's close value
-  const dailyChg = isStock
-    ? getDailyChange(realtimePrice)
-    : optionsRt != null && optionsRt.closeValue !== 0
-      ? (optionsRt.dailyPnl / Math.abs(optionsRt.closeValue)) * 100
-      : null;
-
-  // Today's P&L in dollars
-  const todayPnl = isStock
-    ? (realtimePrice?.last != null && realtimePrice.last > 0 && realtimePrice?.close != null && realtimePrice.close > 0
-        ? (realtimePrice.last - realtimePrice.close) * pos.contracts
-        : null)
-    : optionsRt?.dailyPnl ?? null;
-
-  // For single-leg options, show strike in structure column
-  const isSingleLegOption = pos.legs.length === 1 && pos.structure_type !== "Stock";
-  const singleLegStrike = isSingleLegOption && pos.legs[0]?.strike ? pos.legs[0].strike : null;
-  const structureDisplay = showStrike && singleLegStrike 
-    ? `${pos.structure} $${singleLegStrike}` 
-    : pos.structure;
-
-  // Underlying price (for options positions)
-  const underlyingPrice = realtimePrice?.last != null && realtimePrice.last !== 0 ? realtimePrice.last : null;
-  const { direction: underlyingDirection, flashDirection: underlyingFlash } = usePriceDirection(underlyingPrice);
-
-  return (
-    <>
-      <tr className={flashDirection ? `last-price-${flashDirection}` : undefined}>
-        <td>
-          {hasMultipleLegs ? (
-            <span className="ticker-with-chevron">
-              <button
-                className="leg-toggle-btn"
-                onClick={() => setLegsExpanded((v) => !v)}
-                aria-expanded={legsExpanded}
-                aria-label={`${legsExpanded ? "Collapse" : "Expand"} legs for ${pos.ticker}`}
-              >
-                {legsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              </button>
-              <TickerLink ticker={pos.ticker} positionId={pos.id} />
-            </span>
-          ) : (
-            <TickerLink ticker={pos.ticker} positionId={pos.id} />
-          )}
-        </td>
-        <td>{structureDisplay}</td>
-        <td className="right">{pos.contracts}</td>
-        <td>
-          <span className={`pill ${pos.risk_profile === "defined" ? "defined" : pos.risk_profile === "equity" ? "neutral" : "undefined"}`}>
-            {pos.direction}
-          </span>
-        </td>
-        {showUnderlying && (
-          <td className={`right last-price-cell ${underlyingFlash ? `last-price-${underlyingFlash}` : ""}`}>
-            {underlyingPrice != null ? fmtPrice(underlyingPrice) : "—"}
-            {underlyingDirection === "up" && <ArrowUp size={11} className="price-trend-icon price-trend-up" aria-label="underlying up" />}
-            {underlyingDirection === "down" && <ArrowDown size={11} className="price-trend-icon price-trend-down" aria-label="underlying down" />}
-          </td>
-        )}
-        <td className="right">{fmtPrice(avgEntry)}</td>
-        <td className="right last-price-cell">
-          {lastPrice != null ? fmtPriceOrCalculated(lastPrice, lastPriceIsCalculated) : "—"}
-          {priceDirection === "up" && <ArrowUp size={11} className="price-trend-icon price-trend-up" aria-label="price up" />}
-          {priceDirection === "down" && <ArrowDown size={11} className="price-trend-icon price-trend-down" aria-label="price down" />}
-        </td>
-        <td className={`right ${dailyChg != null ? (dailyChg >= 0 ? "positive" : "negative") : ""}`}>
-          {dailyChg != null ? `${dailyChg >= 0 ? "+" : ""}${dailyChg.toFixed(2)}%` : "—"}
-        </td>
-        <td className={`right ${todayPnl != null ? (todayPnl >= 0 ? "positive" : "negative") : ""}`}>
-          {todayPnl != null ? `${todayPnl >= 0 ? "+" : ""}${fmtUsd(Math.abs(todayPnl))}` : "—"}
-        </td>
-        <td className="right">{fmtUsd(entryCost)}</td>
-        <td className="right">{mv != null ? fmtUsd(mv) : "—"}</td>
-        <td className={`right ${pnl != null ? (pnl >= 0 ? "positive" : "negative") : ""}`}>
-          {pnl != null ? `${pnl >= 0 ? "+" : ""}${fmtUsd(Math.abs(pnl))} (${pnlPct!.toFixed(1)}%)` : "—"}
-        </td>
-        {showExpiry && <td>{pos.expiry !== "N/A" ? pos.expiry : "—"}</td>}
-      </tr>
-      {hasMultipleLegs && legsExpanded && pos.legs.map((leg, i) => {
-        const key = legPriceKey(pos.ticker, pos.expiry, leg);
-        return (
-          <LegRow
-            key={`${pos.id}-leg-${i}`}
-            leg={leg}
-            showExpiry={showExpiry}
-            showUnderlying={showUnderlying}
-            realtimeLegPrice={key && prices ? prices[key] : null}
-          />
-        );
-      })}
-    </>
-  );
-}
-
-type PositionSortKey = "ticker" | "structure" | "qty" | "direction" | "underlying" | "avg_entry" | "last_price" | "daily_chg" | "today_pnl" | "entry_cost" | "market_value" | "pnl" | "expiry";
-
-function getOptionRtMv(pos: PortfolioPosition, prices?: Record<string, PriceData>): number | null {
-  if (pos.structure_type === "Stock" || !prices) return null;
-  let rtMv = 0;
-  for (const leg of pos.legs) {
-    const key = legPriceKey(pos.ticker, pos.expiry, leg);
-    const lp = key ? prices[key] : null;
-    if (!lp || lp.last == null || lp.last <= 0) return null;
-    const sign = leg.direction === "LONG" ? 1 : -1;
-    rtMv += sign * lp.last * leg.contracts * 100;
-  }
-  return rtMv;
-}
-
-export function getOptionDailyChg(pos: PortfolioPosition, prices?: Record<string, PriceData>): number | null {
-  if (pos.structure_type === "Stock" || !prices) return null;
-  let dailyPnl = 0;
-  let closeValue = 0;
-  for (const leg of pos.legs) {
-    const key = legPriceKey(pos.ticker, pos.expiry, leg);
-    const lp = key ? prices[key] : null;
-    if (!lp || lp.last == null || lp.last <= 0 || lp.close == null || lp.close <= 0) return null;
-    const sign = leg.direction === "LONG" ? 1 : -1;
-    dailyPnl += sign * (lp.last - lp.close) * leg.contracts * 100;
-    closeValue += sign * lp.close * leg.contracts * 100;
-  }
-  if (closeValue === 0) return null;
-  return (dailyPnl / Math.abs(closeValue)) * 100;
-}
-
-function getTodayPnlDollars(pos: PortfolioPosition, prices?: Record<string, PriceData>): number | null {
-  if (!prices) return null;
-  if (pos.structure_type === "Stock") {
-    const p = prices[pos.ticker];
-    if (!p || p.last == null || p.last <= 0 || p.close == null || p.close <= 0) return null;
-    return (p.last - p.close) * pos.contracts;
-  }
-  // Options/spreads
-  let pnl = 0;
-  for (const leg of pos.legs) {
-    const key = legPriceKey(pos.ticker, pos.expiry, leg);
-    const lp = key ? prices[key] : null;
-    if (!lp || lp.last == null || lp.last <= 0 || lp.close == null || lp.close <= 0) return null;
-    const sign = leg.direction === "LONG" ? 1 : -1;
-    pnl += sign * (lp.last - lp.close) * leg.contracts * 100;
-  }
-  return pnl;
-}
-
-function makePositionExtract(prices?: Record<string, PriceData>) {
-  return (pos: PortfolioPosition, key: PositionSortKey): string | number | null => {
-    const isStock = pos.structure_type === "Stock";
-    const _stockLast = prices?.[pos.ticker]?.last;
-    const rtStockLast = _stockLast != null && _stockLast > 0 ? _stockLast : null;
-    const optRtMv = getOptionRtMv(pos, prices);
-    const mv = isStock && rtStockLast != null ? rtStockLast * pos.contracts : optRtMv ?? resolveMarketValue(pos);
-    switch (key) {
-      case "ticker": return pos.ticker;
-      case "structure": return pos.structure;
-      case "qty": return pos.contracts;
-      case "direction": return pos.direction;
-      case "underlying": return rtStockLast;
-      case "avg_entry": return getAvgEntry(pos);
-      case "last_price": {
-        if (isStock && rtStockLast != null) return rtStockLast;
-        if (optRtMv != null) return optRtMv / (pos.contracts * getMultiplier(pos));
-        return getLastPrice(pos);
-      }
-      case "daily_chg": return isStock ? getDailyChange(prices?.[pos.ticker]) : getOptionDailyChg(pos, prices);
-      case "today_pnl": return getTodayPnlDollars(pos, prices);
-      case "entry_cost": return resolveEntryCost(pos);
-      case "market_value": return mv;
-      case "pnl": return mv != null ? mv - resolveEntryCost(pos) : null;
-      case "expiry": return pos.expiry === "N/A" ? null : pos.expiry;
-      default: return null;
-    }
-  };
-}
-
-function PositionTable({ positions, showExpiry = true, showStrike = false, showUnderlying = false, prices }: { positions: PortfolioPosition[]; showExpiry?: boolean; showStrike?: boolean; showUnderlying?: boolean; prices?: Record<string, PriceData> }) {
-  const positionExtract = useMemo(() => makePositionExtract(prices), [prices]);
-  const { sorted, sort, toggle } = useSort(positions, positionExtract);
-
-  return (
-    <table>
-      <thead>
-        <tr>
-          <SortTh<PositionSortKey> label="Ticker" sortKey="ticker" activeKey={sort.key} direction={sort.direction} onToggle={toggle} />
-          <SortTh<PositionSortKey> label="Structure" sortKey="structure" activeKey={sort.key} direction={sort.direction} onToggle={toggle} />
-          <SortTh<PositionSortKey> label="Qty" sortKey="qty" className="right" activeKey={sort.key} direction={sort.direction} onToggle={toggle} />
-          <SortTh<PositionSortKey> label="Direction" sortKey="direction" activeKey={sort.key} direction={sort.direction} onToggle={toggle} />
-          {showUnderlying && <SortTh<PositionSortKey> label="Underlying" sortKey="underlying" className="right" activeKey={sort.key} direction={sort.direction} onToggle={toggle} />}
-          <SortTh<PositionSortKey> label="Avg Entry" sortKey="avg_entry" className="right" activeKey={sort.key} direction={sort.direction} onToggle={toggle} />
-          <SortTh<PositionSortKey> label="Last Price" sortKey="last_price" className="right" activeKey={sort.key} direction={sort.direction} onToggle={toggle} />
-          <SortTh<PositionSortKey> label="Day Chg" sortKey="daily_chg" className="right" activeKey={sort.key} direction={sort.direction} onToggle={toggle} />
-          <SortTh<PositionSortKey> label="Today P&L" sortKey="today_pnl" className="right" activeKey={sort.key} direction={sort.direction} onToggle={toggle} />
-          <SortTh<PositionSortKey> label="Entry Cost" sortKey="entry_cost" className="right" activeKey={sort.key} direction={sort.direction} onToggle={toggle} />
-          <SortTh<PositionSortKey> label="Market Value" sortKey="market_value" className="right" activeKey={sort.key} direction={sort.direction} onToggle={toggle} />
-          <SortTh<PositionSortKey> label="P&L" sortKey="pnl" className="right" activeKey={sort.key} direction={sort.direction} onToggle={toggle} />
-          {showExpiry && <SortTh<PositionSortKey> label="Expiry" sortKey="expiry" activeKey={sort.key} direction={sort.direction} onToggle={toggle} />}
-        </tr>
-      </thead>
-      <tbody>
-        {sorted.map((pos) => (
-          <PositionRow key={pos.id} pos={pos} showExpiry={showExpiry} showStrike={showStrike} showUnderlying={showUnderlying} realtimePrice={prices?.[pos.ticker]} prices={prices} />
-        ))}
-      </tbody>
-    </table>
-  );
-}
+/* ─── Portfolio sections ──────────────────────────────────── */
 
 function PortfolioSections({ portfolio, prices }: { portfolio: PortfolioData | null; prices?: Record<string, PriceData> }) {
   if (!portfolio) {
@@ -949,7 +615,7 @@ function JournalSections() {
     return [...data.trades].sort((a, b) => b.id - a.id);
   }, [data]);
 
-  const fmtUsd = (v: number | undefined | null) => {
+  const fmtJournalUsd = (v: number | undefined | null) => {
     if (v == null) return "—";
     const abs = Math.abs(v);
     const formatted = abs >= 1000 ? `$${abs.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : `$${abs.toFixed(2)}`;
@@ -1014,9 +680,9 @@ function JournalSections() {
                       <td>{t.structure}</td>
                       <td><span className={decisionClass(t.decision)}>{t.decision}</span></td>
                       <td className="right">{qty ?? "—"}</td>
-                      <td className="right">{fmtUsd(cost)}</td>
-                      <td className="right">{fmtUsd(t.max_risk)}</td>
-                      <td className="right"><span className={pnlClass(t.realized_pnl)}>{fmtUsd(t.realized_pnl)}</span></td>
+                      <td className="right">{fmtJournalUsd(cost)}</td>
+                      <td className="right">{fmtJournalUsd(t.max_risk)}</td>
+                      <td className="right"><span className={pnlClass(t.realized_pnl)}>{fmtJournalUsd(t.realized_pnl)}</span></td>
                       <td className="right">{t.return_on_risk != null ? `${(t.return_on_risk * 100).toFixed(1)}%` : "—"}</td>
                       <td className="cell-muted">{t.gates_passed?.join(", ") || t.gates_failed?.join(", ") || "—"}</td>
                       <td className="cell-muted">{t.edge_analysis?.edge_type ?? "—"}</td>

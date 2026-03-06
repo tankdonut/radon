@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { fmtPrice } from "@/components/WorkspaceSections";
+import { fmtPrice } from "@/lib/positionUtils";
 
 /* ─── Types matching the actual API response ─── */
 

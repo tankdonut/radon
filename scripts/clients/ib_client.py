@@ -59,9 +59,9 @@ class IBContractError(IBError):
 
 CLIENT_IDS: dict = {
     "ib_order_manage": 0,
-    "ib_sync": 0,
+    "ib_sync": 10,
     "ib_orders": 11,
-    "ib_reconcile": 0,
+    "ib_reconcile": 12,
     "ib_order": 2,
     "ib_execute": 25,
     "ib_fill_monitor": 52,

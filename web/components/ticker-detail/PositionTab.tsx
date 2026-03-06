@@ -12,7 +12,7 @@ import {
   getAvgEntry,
   getMultiplier,
   legPriceKey,
-} from "@/components/WorkspaceSections";
+} from "@/lib/positionUtils";
 
 type PositionTabProps = {
   position: PortfolioPosition;
