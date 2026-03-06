@@ -11,6 +11,7 @@ import { useOrders } from "@/lib/useOrders";
 import { useToast } from "@/lib/useToast";
 import { useOrderActions } from "@/lib/OrderActionsContext";
 import { usePrices } from "@/lib/usePrices";
+import { useBlotter } from "@/lib/useBlotter";
 import { usePreviousClose } from "@/lib/usePreviousClose";
 import { type OptionContract, optionKey, portfolioLegToContract } from "@/lib/pricesProtocol";
 import Sidebar from "@/components/Sidebar";
@@ -114,6 +115,9 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
   // Backfill missing previous-close from Yahoo Finance / UW for day-change calc
   const prices = usePreviousClose(rawPrices);
 
+  // Blotter for today's realized P&L
+  const { data: blotterData } = useBlotter();
+
   // Sync prices + portfolio into ticker-detail context (refs, no re-renders)
   const { setPrices: setTickerPrices, setPortfolio: setTickerPortfolio, setOrders: setTickerOrders } = useTickerDetail();
   useEffect(() => { setTickerPrices(prices); }, [prices, setTickerPrices]);
@@ -205,7 +209,7 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
         <div className="content">
           {activeSection === "dashboard" ? <ChatPanel activeSection={activeSection} /> : null}
 
-          {activeSection !== "dashboard" ? <MetricCards portfolio={portfolio} /> : null}
+          {activeSection !== "dashboard" ? <MetricCards portfolio={portfolio} prices={prices} realizedPnl={blotterData?.summary.realized_pnl ?? 0} /> : null}
 
           {activeSection !== "dashboard" ? (
             <WorkspaceSections section={activeSection} portfolio={portfolio} orders={orders} prices={prices} />

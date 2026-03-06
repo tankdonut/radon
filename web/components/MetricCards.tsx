@@ -1,13 +1,20 @@
 import type { PortfolioData } from "@/lib/types";
+import type { PriceData } from "@/lib/pricesProtocol";
+import { legPriceKey } from "@/components/WorkspaceSections";
 
 type MetricCardsProps = {
   portfolio: PortfolioData | null;
+  prices?: Record<string, PriceData>;
+  realizedPnl?: number;
 };
 
 const fmt = (n: number) =>
   n >= 1_000_000
     ? `$${(n / 1_000_000).toFixed(2)}M`
     : `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+
+const fmtSigned = (n: number) =>
+  `${n >= 0 ? "+" : ""}${fmt(Math.abs(n))}`;
 
 function resolveMarketValue(pos: PortfolioData["positions"][number]): number | null {
   if (pos.market_value != null) return pos.market_value;
@@ -26,7 +33,47 @@ function computePnL(portfolio: PortfolioData) {
   return totalPnL;
 }
 
-export default function MetricCards({ portfolio }: MetricCardsProps) {
+function computeTodayUnrealizedPnl(
+  portfolio: PortfolioData,
+  prices: Record<string, PriceData>,
+): { pnl: number; positionsWithData: number; totalPositions: number } {
+  let pnl = 0;
+  let positionsWithData = 0;
+  const totalPositions = portfolio.positions.length;
+
+  for (const pos of portfolio.positions) {
+    if (pos.structure_type === "Stock") {
+      const p = prices[pos.ticker];
+      if (p?.last != null && p.last > 0 && p?.close != null && p.close > 0) {
+        pnl += (p.last - p.close) * pos.contracts;
+        positionsWithData++;
+      }
+      continue;
+    }
+
+    // Options / spreads: sum across legs
+    let legPnl = 0;
+    let allLegsValid = true;
+    for (const leg of pos.legs) {
+      const key = legPriceKey(pos.ticker, pos.expiry, leg);
+      const lp = key ? prices[key] : null;
+      if (!lp || lp.last == null || lp.last <= 0 || lp.close == null || lp.close <= 0) {
+        allLegsValid = false;
+        break;
+      }
+      const sign = leg.direction === "LONG" ? 1 : -1;
+      legPnl += sign * (lp.last - lp.close) * leg.contracts * 100;
+    }
+    if (allLegsValid) {
+      pnl += legPnl;
+      positionsWithData++;
+    }
+  }
+
+  return { pnl, positionsWithData, totalPositions };
+}
+
+export default function MetricCards({ portfolio, prices, realizedPnl }: MetricCardsProps) {
   if (!portfolio) {
     const placeholders = ["Net Liquidation", "Positions", "Deployed", "Open P&L"];
     return (
@@ -77,6 +124,16 @@ export default function MetricCards({ portfolio }: MetricCardsProps) {
     },
   ];
 
+  // Today's P&L computation
+  const hasPrices = prices && Object.keys(prices).length > 0;
+  const todayUnrealized = hasPrices
+    ? computeTodayUnrealizedPnl(portfolio, prices)
+    : null;
+  const hasDaily = todayUnrealized != null && todayUnrealized.positionsWithData > 0;
+  const unrealized = todayUnrealized?.pnl ?? 0;
+  const realized = realizedPnl ?? 0;
+  const total = unrealized + realized;
+
   return (
     <>
       <div className="section-label-mono">NET LEVERAGE</div>
@@ -95,6 +152,51 @@ export default function MetricCards({ portfolio }: MetricCardsProps) {
           </div>
         ))}
       </div>
+
+      <div className="section-label-mono">TODAY&apos;S P&amp;L</div>
+      {hasDaily ? (
+        <div className="metrics-grid-3">
+          <div className="metric-card">
+            <div className="metric-label">Unrealized</div>
+            <div className="metric-value">{fmtSigned(unrealized)}</div>
+            <div className="metric-change neutral">
+              {todayUnrealized!.positionsWithData} OF {todayUnrealized!.totalPositions} POSITIONS
+            </div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">Realized</div>
+            <div className="metric-value">{fmtSigned(realized)}</div>
+            <div className="metric-change neutral">TODAY&apos;S FILLS</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">Total</div>
+            <div className={`metric-value ${total >= 0 ? "positive" : "negative"}`}>
+              {fmtSigned(total)}
+            </div>
+            <div className={`metric-change ${total >= 0 ? "positive" : "negative"}`}>
+              COMBINED
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="metrics-grid-3">
+          <div className="metric-card metric-card-loading">
+            <div className="metric-label">Unrealized</div>
+            <div className="metric-value">---</div>
+            <div className="metric-change neutral">MARKET CLOSED</div>
+          </div>
+          <div className="metric-card metric-card-loading">
+            <div className="metric-label">Realized</div>
+            <div className="metric-value">{realizedPnl != null ? fmtSigned(realized) : "---"}</div>
+            <div className="metric-change neutral">{realizedPnl != null ? "TODAY'S FILLS" : "MARKET CLOSED"}</div>
+          </div>
+          <div className="metric-card metric-card-loading">
+            <div className="metric-label">Total</div>
+            <div className="metric-value">---</div>
+            <div className="metric-change neutral">MARKET CLOSED</div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
