@@ -1,14 +1,8 @@
 #!/usr/bin/env python3
-"""Fetch MenthorQ CTA positioning data via headless browser + Claude Vision.
+"""Fetch MenthorQ CTA positioning data via MenthorQClient.
 
-MenthorQ renders CTA positioning tables as images (not structured HTML).
-This script:
-  1. Launches headless Chromium via Playwright
-  2. Logs in to MenthorQ (credentials via env vars)
-  3. Navigates to the CTA dashboard for a given date
-  4. Screenshots each CTA table card
-  5. Sends screenshots to Claude Haiku Vision for structured extraction
-  6. Caches result as daily JSON in data/menthorq_cache/
+Delegates browser automation and Vision extraction to MenthorQClient,
+handles caching as daily JSON in data/menthorq_cache/.
 
 Credentials (project root .env, loaded via python-dotenv):
   MENTHORQ_USER  — MenthorQ email/username
@@ -25,11 +19,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import os
 import sys
-import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,17 +43,6 @@ CTA_TABLES = {
     "commodity": "cta_commodity",
     "currency": "cta_currency",
 }
-
-MENTHORQ_DASHBOARD_URL = (
-    "https://menthorq.com/account/"
-    "?action=data&type=dashboard&commands=cta&date={date}"
-)
-
-MENTHORQ_LOGIN_URL = "https://menthorq.com/login/"
-
-# ── Anthropic API key resolution ──────────────────────────────────
-ANTHROPIC_ENV_KEYS = ["ANTHROPIC_API_KEY", "CLAUDE_CODE_API_KEY", "CLAUDE_API_KEY"]
-
 
 def is_market_open() -> bool:
     """Check if US equity markets are currently open."""
@@ -114,14 +95,6 @@ def resolve_trading_date() -> str:
     from datetime import timedelta
     target = now - timedelta(days=delta)
     return target.strftime("%Y-%m-%d")
-
-
-def resolve_api_key() -> Optional[str]:
-    for key in ANTHROPIC_ENV_KEYS:
-        value = os.environ.get(key, "").strip()
-        if value:
-            return value
-    return None
 
 
 def resolve_menthorq_creds() -> tuple[Optional[str], Optional[str]]:
@@ -180,203 +153,6 @@ def write_cache(date_str: str, tables: Dict[str, List[Dict]]) -> Path:
 
 
 # ══════════════════════════════════════════════════════════════════
-# Browser: Login + Screenshot
-# ══════════════════════════════════════════════════════════════════
-
-def screenshot_cta_tables(
-    date_str: str,
-    username: str,
-    password: str,
-    headless: bool = True,
-) -> Dict[str, bytes]:
-    """Launch Playwright, login to MenthorQ, screenshot CTA table cards.
-
-    Returns {table_key: png_bytes} for each successfully captured table.
-    """
-    from playwright.sync_api import sync_playwright
-
-    screenshots: Dict[str, bytes] = {}
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
-        context = browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            user_agent=(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
-        )
-        page = context.new_page()
-
-        # ── Login ──
-        print("  Navigating to MenthorQ login...", file=sys.stderr)
-        page.goto(MENTHORQ_LOGIN_URL, wait_until="networkidle", timeout=30000)
-        time.sleep(2)
-
-        # WordPress login form — try multiple selector patterns
-        username_selectors = [
-            'input[name="log"]',
-            'input#user_login',
-            'input[name="username"]',
-            'input[type="text"]',
-            'input[type="email"]',
-        ]
-        password_selectors = [
-            'input[name="pwd"]',
-            'input#user_pass',
-            'input[name="password"]',
-            'input[type="password"]',
-        ]
-
-        for sel in username_selectors:
-            el = page.query_selector(sel)
-            if el:
-                el.fill(username)
-                break
-
-        for sel in password_selectors:
-            el = page.query_selector(sel)
-            if el:
-                el.fill(password)
-                break
-
-        # Submit — try multiple patterns
-        submit_selectors = [
-            'input[name="wp-submit"]',
-            'input[type="submit"]',
-            'button[type="submit"]',
-            '#wp-submit',
-        ]
-        for sel in submit_selectors:
-            el = page.query_selector(sel)
-            if el:
-                el.click()
-                break
-
-        page.wait_for_load_state("networkidle", timeout=30000)
-        time.sleep(3)
-
-        # Verify login succeeded
-        current_url = page.url.lower()
-        if "/login" in current_url or "/wp-login" in current_url:
-            print("  ERROR: Login failed. Check credentials.", file=sys.stderr)
-            browser.close()
-            return {}
-
-        print("  Login successful.", file=sys.stderr)
-
-        # ── Navigate to CTA dashboard ──
-        dashboard_url = MENTHORQ_DASHBOARD_URL.format(date=date_str)
-        print(f"  Loading CTA dashboard: {date_str}...", file=sys.stderr)
-        page.goto(dashboard_url, wait_until="networkidle", timeout=60000)
-        time.sleep(3)
-
-        # ── Screenshot each CTA card ──
-        for table_key, slug in CTA_TABLES.items():
-            try:
-                # Find the card by data-command-slug attribute
-                card = page.query_selector(f'[data-command-slug="{slug}"]')
-                if not card:
-                    # Try broader selector
-                    card = page.query_selector(f'.command-card:has([data-command-slug="{slug}"])')
-                if not card:
-                    print(f"  WARNING: Card not found for {slug}", file=sys.stderr)
-                    continue
-
-                # Screenshot the card's main container or the card itself
-                container = card.query_selector(".main-container") or card
-                png = container.screenshot(type="png")
-                screenshots[table_key] = png
-                print(f"  Screenshot: {table_key} ({len(png):,} bytes)", file=sys.stderr)
-            except Exception as exc:
-                print(f"  WARNING: Screenshot failed for {slug}: {exc}", file=sys.stderr)
-
-        browser.close()
-
-    return screenshots
-
-
-# ══════════════════════════════════════════════════════════════════
-# Vision Extraction
-# ══════════════════════════════════════════════════════════════════
-
-def extract_via_vision(
-    png_bytes: bytes,
-    api_key: str,
-    table_key: str,
-) -> Optional[List[Dict[str, Any]]]:
-    """Send a screenshot to Claude Haiku Vision, extract structured CTA data."""
-    import httpx
-
-    b64 = base64.b64encode(png_bytes).decode("utf-8")
-
-    try:
-        resp = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 4096,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/png",
-                                    "data": b64,
-                                },
-                            },
-                            {"type": "text", "text": EXTRACTION_PROMPT},
-                        ],
-                    }
-                ],
-            },
-            timeout=60.0,
-        )
-
-        if resp.status_code != 200:
-            print(f"  Vision API error ({table_key}): {resp.status_code} {resp.text[:200]}", file=sys.stderr)
-            return None
-
-        data = resp.json()
-        text = None
-        for block in data.get("content", []):
-            if block.get("type") == "text":
-                text = block.get("text", "")
-                break
-
-        if not text:
-            return None
-
-        # Strip markdown fences if present
-        cleaned = text.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[-1] if "\n" in cleaned else cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
-
-        parsed = json.loads(cleaned)
-        if not isinstance(parsed, list):
-            return None
-
-        print(f"  Vision: {table_key} — {len(parsed)} assets extracted", file=sys.stderr)
-        return parsed
-
-    except Exception as exc:
-        print(f"  Vision extraction failed ({table_key}): {exc}", file=sys.stderr)
-        return None
-
-
-# ══════════════════════════════════════════════════════════════════
 # Main Fetch Pipeline
 # ══════════════════════════════════════════════════════════════════
 
@@ -385,7 +161,7 @@ def fetch_menthorq_cta(
     force: bool = False,
     headless: bool = True,
 ) -> Optional[Dict[str, Any]]:
-    """Fetch MenthorQ CTA data: check cache, screenshot, extract, cache.
+    """Fetch MenthorQ CTA data: check cache, use client to extract, cache.
 
     Returns the full cache entry dict, or None on failure.
     """
@@ -399,33 +175,22 @@ def fetch_menthorq_cta(
             print(f"  Cache hit: {cache_path(date_str)}", file=sys.stderr)
             return cached
 
-    # Validate credentials
-    username, password = resolve_menthorq_creds()
-    if not username or not password:
-        print("  ERROR: MenthorQ credentials not available.", file=sys.stderr)
-        return None
+    # Use MenthorQClient for browser + vision extraction
+    try:
+        from clients.menthorq_client import MenthorQClient, MenthorQError
 
-    # Validate API key
-    api_key = resolve_api_key()
-    if not api_key:
-        print("  ERROR: No Anthropic API key found.", file=sys.stderr)
-        return None
+        with MenthorQClient(headless=headless) as client:
+            tables = client.get_cta(date_str)
 
-    # Screenshot
-    screenshots = screenshot_cta_tables(date_str, username, password, headless=headless)
-    if not screenshots:
-        print("  ERROR: No screenshots captured.", file=sys.stderr)
+    except MenthorQError as exc:
+        print(f"  ERROR: {exc}", file=sys.stderr)
         return None
-
-    # Extract via Vision
-    tables: Dict[str, List[Dict]] = {}
-    for table_key, png_bytes in screenshots.items():
-        extracted = extract_via_vision(png_bytes, api_key, table_key)
-        if extracted:
-            tables[table_key] = extracted
+    except Exception as exc:
+        print(f"  ERROR: Unexpected failure: {exc}", file=sys.stderr)
+        return None
 
     if not tables:
-        print("  ERROR: Vision extraction returned no data.", file=sys.stderr)
+        print("  ERROR: No CTA data extracted.", file=sys.stderr)
         return None
 
     # Cache
