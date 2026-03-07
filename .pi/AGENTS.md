@@ -121,6 +121,7 @@ When market is closed, free trade analysis explicitly shows it's using closing p
 | `sync` | Pull live portfolio from Interactive Brokers |
 | `blotter` | Trade blotter - today's fills, P&L, spread grouping |
 | `risk-reversal [TICKER]` | **Run `python3 scripts/risk_reversal.py [TICKER]`** — IV skew risk reversal analysis + HTML report |
+| `vcg` | **VCG scan — call `vcg_scan` tool (registered Pi tool).** Do NOT re-read strategy docs. |
 | `strategies` | List available trading strategies (reads `data/strategies.json`) |
 
 ### Evaluate Command Details
@@ -305,6 +306,47 @@ python3 scripts/risk_reversal.py IWM --json
 
 **Output:** `reports/{ticker}-risk-reversal-{date}.html` (auto-opens in browser)
 **Template:** `.pi/skills/html-report/risk-reversal-template.html`
+
+### VCG Command Details (MANDATORY — NO DOC READS)
+
+**When user runs `vcg`, ALWAYS call the `vcg_scan` Pi tool. Do NOT read `docs/strategies.md` or `docs/cross_asset_volatility_credit_gap_spec_(VCG).md`. The tool returns all data needed.**
+
+The `vcg_scan` tool runs `scripts/vcg_scan.py --json` which fetches 1Y daily bars for VIX, VVIX, HYG (IB primary, Yahoo fallback), computes the rolling 21-day OLS regression, and returns the full signal.
+
+**Interpretation rules (memorize — do not look up):**
+
+| Field | Interpretation |
+|-------|---------------|
+| `signal.vcg > +2` | Credit artificially calm — RISK-OFF if HDR=1 |
+| `signal.vcg < -2` | Credit overshot vol signal — tactical exhaustion |
+| `signal.vcg` in ±2 | Normal — no signal |
+| `signal.hdr = 1` | All 3 conditions met: VVIX>110, credit 5d>-0.5%, VIX<40 |
+| `signal.ro = 1` | **RISK-OFF TRIGGER** — HDR=1 AND VCG>2 |
+| `signal.sign_suppressed = true` | β₁ positive (wrong sign) — model unreliable, do not trade |
+| `signal.regime` | DIVERGENCE (VIX<40), TRANSITION (40-48), PANIC (≥48) |
+
+**HDR conditions (all 3 must PASS):**
+- VVIX > 110 (vol-of-vol elevated)
+- Credit 5d return > -0.5% (credit hasn't caught down yet)
+- VIX < 40 (not in panic)
+
+**Decision matrix:**
+- `RO=1` → RISK-OFF: reduce credit beta, preserve hedges, consider HYG puts
+- `HDR=1, VCG<2` → ELEVATED: monitor, divergence conditions met but gap not extreme
+- `HDR=0` → NORMAL: at least one gate fails, no action
+- `sign_suppressed=true` → UNRELIABLE: wrong beta signs, skip
+
+**Present results as:**
+```
+VCG SCAN — {date}
+VCG: {vcg} | VCG div: {vcg_div} | Regime: {regime}
+HDR: {hdr} (VVIX={vvix}, Credit 5d={credit_5d}%, VIX={vix})
+Model: β₁={beta1} β₂={beta2} | Sign: {OK/SUPPRESSED}
+Attribution: VVIX {vvix_pct}% / VIX {vix_pct}%
+SIGNAL: {RO/HDR/NORMAL/UNRELIABLE}
+```
+
+**To also generate HTML report:** `python3 scripts/vcg_scan.py` (without --json).
 
 | `blotter-history` | Historical trades via Flex Query (requires setup) |
 | `leap-scan [TICKERS]` | Scan for LEAP IV mispricing opportunities |

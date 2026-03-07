@@ -11,6 +11,7 @@ import { Type } from "@sinclair/typebox";
 import { kelly as kellyWrapper } from "./wrappers/kelly";
 import { fetchTicker } from "./wrappers/fetch-ticker";
 import { scanner as scannerWrapper } from "./wrappers/scanner";
+import { vcgScan } from "./wrappers/vcg-scan";
 
 export function registerTradingTools(pi: ExtensionAPI) {
   // Kelly calculator — uses the Python wrapper for full feature parity
@@ -108,6 +109,54 @@ export function registerTradingTools(pi: ExtensionAPI) {
       } catch (e: any) {
         return {
           content: [{ type: "text" as const, text: `Error: ${e?.message ?? String(e)}` }],
+        };
+      }
+    },
+  });
+
+  // VCG scan tool — runs vcg_scan.py --json and returns structured signal
+  pi.registerTool({
+    name: "vcg_scan",
+    label: "VCG Scanner",
+    description:
+      "Cross-Asset Volatility-Credit Gap scan. Fetches 1Y daily bars for VIX, VVIX, HYG, runs rolling 21-day OLS, computes VCG z-score and HDR/RO signal. Returns JSON with signal state, HDR conditions, model betas, attribution, and 10-day history.",
+    parameters: Type.Object({
+      proxy: Type.Optional(
+        Type.String({ description: "Credit proxy: HYG (default), JNK, or LQD" }),
+      ),
+      backtest: Type.Optional(
+        Type.Boolean({ description: "Run rolling backtest over historical data" }),
+      ),
+      days: Type.Optional(
+        Type.Number({ description: "Backtest lookback days (default 252)" }),
+      ),
+    }),
+    async execute(_toolCallId: string, params: any) {
+      try {
+        const result = await vcgScan({
+          proxy: params?.proxy,
+          backtest: params?.backtest,
+          days: params?.days,
+        });
+
+        if (!result.ok) {
+          return {
+            content: [
+              { type: "text" as const, text: `VCG scan failed: ${result.stderr}` },
+            ],
+          };
+        }
+
+        return {
+          content: [
+            { type: "text" as const, text: JSON.stringify(result.data, null, 2) },
+          ],
+        };
+      } catch (e: any) {
+        return {
+          content: [
+            { type: "text" as const, text: `Error: ${e?.message ?? String(e)}` },
+          ],
         };
       }
     },
