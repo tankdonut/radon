@@ -249,21 +249,25 @@ class TestMenthorQClientCTA:
     def test_get_cta_builds_correct_url(self, client, mock_playwright):
         """get_cta() navigates to CTA dashboard URL with date param."""
         page = mock_playwright["page"]
-        with patch.object(client, "_screenshot_cards", return_value={}):
-            with patch.object(client, "_extract_via_vision", return_value=[]):
-                try:
-                    client.get_cta("2026-03-06")
-                except MenthorQExtractionError:
-                    pass  # Expected when no screenshots
+        page.evaluate.return_value = 4  # Card count polling
+        with patch.object(client, "_download_card_images", return_value={}):
+            with patch.object(client, "_screenshot_cards", return_value={}):
+                with patch.object(client, "_extract_via_vision", return_value=[]):
+                    try:
+                        client.get_cta("2026-03-06")
+                    except MenthorQExtractionError:
+                        pass  # Expected when no images
 
         nav_calls = page.goto.call_args_list
         cta_calls = [c for c in nav_calls if "commands=cta" in str(c)]
         assert len(cta_calls) >= 1, "Should navigate to CTA URL"
 
-    def test_get_cta_screenshots_four_cards(self, client, mock_playwright):
-        """get_cta() attempts to screenshot all 4 CTA card slugs."""
-        with patch.object(client, "_screenshot_cards") as mock_ss:
-            mock_ss.return_value = {
+    def test_get_cta_downloads_four_card_images(self, client, mock_playwright):
+        """get_cta() attempts to download S3 images for all 4 CTA cards."""
+        page = mock_playwright["page"]
+        page.evaluate.return_value = 4
+        with patch.object(client, "_download_card_images") as mock_dl:
+            mock_dl.return_value = {
                 "main": b"png1",
                 "index": b"png2",
                 "commodity": b"png3",
@@ -272,15 +276,16 @@ class TestMenthorQClientCTA:
             with patch.object(client, "_extract_via_vision", return_value=[{"underlying": "test"}]):
                 client.get_cta("2026-03-06")
 
-            # Verify screenshot was called with the 4 CTA slugs
-            mock_ss.assert_called_once()
-            args = mock_ss.call_args
+            mock_dl.assert_called_once()
+            args = mock_dl.call_args
             slugs = args[0][1] if len(args[0]) > 1 else args[1].get("slugs", {})
             assert len(slugs) == 4 or isinstance(slugs, dict) and len(slugs) == 4
 
     def test_get_cta_calls_vision_extraction(self, client, mock_playwright):
-        """get_cta() sends each screenshot to Vision for extraction."""
-        with patch.object(client, "_screenshot_cards", return_value={
+        """get_cta() sends each image to Vision for extraction."""
+        page = mock_playwright["page"]
+        page.evaluate.return_value = 4
+        with patch.object(client, "_download_card_images", return_value={
             "main": b"png_bytes_main",
             "index": b"png_bytes_index",
         }):
@@ -290,7 +295,9 @@ class TestMenthorQClientCTA:
 
     def test_get_cta_returns_tables_dict(self, client, mock_playwright):
         """get_cta() returns dict mapping table keys to lists of dicts."""
-        with patch.object(client, "_screenshot_cards", return_value={
+        page = mock_playwright["page"]
+        page.evaluate.return_value = 4
+        with patch.object(client, "_download_card_images", return_value={
             "main": b"png1",
             "index": b"png2",
         }):
@@ -303,6 +310,18 @@ class TestMenthorQClientCTA:
         assert "main" in result
         assert isinstance(result["main"], list)
         assert result["main"][0]["underlying"] == "E-Mini S&P 500"
+
+    def test_get_cta_falls_back_to_screenshots(self, client, mock_playwright):
+        """get_cta() falls back to screenshots when S3 download fails."""
+        page = mock_playwright["page"]
+        page.evaluate.return_value = 4
+        with patch.object(client, "_download_card_images", return_value={}):
+            with patch.object(client, "_screenshot_cards", return_value={
+                "main": b"png1",
+            }) as mock_ss:
+                with patch.object(client, "_extract_via_vision", return_value=[{"underlying": "test"}]):
+                    client.get_cta("2026-03-06")
+                mock_ss.assert_called_once()
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -376,49 +395,84 @@ class TestMenthorQClientDashboardImage:
     def test_get_dashboard_image_builds_correct_url(self, client, mock_playwright):
         """get_dashboard_image() navigates to dashboard URL with command param."""
         page = mock_playwright["page"]
-        page.screenshot.return_value = b"\x89PNG_fake"
-
-        client.get_dashboard_image("gex")
+        page.evaluate.return_value = 1  # card count polling
+        with patch.object(client, "_download_card_images", return_value={"gex": b"\x89PNG_s3"}):
+            client.get_dashboard_image("gex")
 
         nav_calls = page.goto.call_args_list
         gex_calls = [c for c in nav_calls if "commands=gex" in str(c)]
         assert len(gex_calls) >= 1
 
+    def test_get_dashboard_image_tries_s3_first(self, client, mock_playwright):
+        """get_dashboard_image() tries S3 download before viewport screenshot."""
+        page = mock_playwright["page"]
+        page.evaluate.return_value = 1
+        with patch.object(client, "_download_card_images", return_value={"gex": b"\x89PNG_s3"}) as mock_dl:
+            result = client.get_dashboard_image("gex")
+            mock_dl.assert_called_once()
+            assert result == b"\x89PNG_s3"
+            # Should NOT fall back to page.screenshot
+            page.screenshot.assert_not_called()
+
+    def test_get_dashboard_image_falls_back_to_screenshot(self, client, mock_playwright):
+        """get_dashboard_image() falls back to viewport screenshot when S3 fails."""
+        page = mock_playwright["page"]
+        page.evaluate.return_value = 0  # no cards found
+        page.screenshot.return_value = b"\x89PNG_viewport"
+        with patch.object(client, "_download_card_images", return_value={}):
+            result = client.get_dashboard_image("gex")
+            assert result == b"\x89PNG_viewport"
+            page.screenshot.assert_called_once()
+
     def test_get_dashboard_image_returns_png_bytes(self, client, mock_playwright):
         """get_dashboard_image() returns PNG bytes."""
         page = mock_playwright["page"]
-        page.screenshot.return_value = b"\x89PNG_fake_data"
-
-        result = client.get_dashboard_image("dix")
+        page.evaluate.return_value = 1
+        with patch.object(client, "_download_card_images", return_value={"dix": b"\x89PNG_fake_data"}):
+            result = client.get_dashboard_image("dix")
         assert isinstance(result, bytes)
         assert len(result) > 0
 
     def test_get_dashboard_image_with_tickers(self, client, mock_playwright):
         """get_dashboard_image() passes optional tickers param."""
         page = mock_playwright["page"]
-        page.screenshot.return_value = b"\x89PNG"
-
-        client.get_dashboard_image("cryptos_options", tickers="cryptos_options")
+        page.evaluate.return_value = 1
+        with patch.object(client, "_download_card_images", return_value={"cryptos_options": b"\x89PNG"}):
+            client.get_dashboard_image("cryptos_options", tickers="cryptos_options")
 
         nav_calls = page.goto.call_args_list
         crypto_calls = [c for c in nav_calls if "tickers=cryptos_options" in str(c)]
         assert len(crypto_calls) >= 1
 
     def test_get_dashboard_image_raises_on_empty(self, client, mock_playwright):
-        """get_dashboard_image() raises MenthorQExtractionError on empty screenshot."""
+        """get_dashboard_image() raises MenthorQExtractionError when both S3 and screenshot fail."""
         page = mock_playwright["page"]
+        page.evaluate.return_value = 0
         page.screenshot.return_value = b""
-
-        with pytest.raises(MenthorQExtractionError):
-            client.get_dashboard_image("vix")
+        with patch.object(client, "_download_card_images", return_value={}):
+            with pytest.raises(MenthorQExtractionError):
+                client.get_dashboard_image("vix")
 
     def test_get_dashboard_image_raises_on_exception(self, client, mock_playwright):
         """get_dashboard_image() raises MenthorQExtractionError on screenshot failure."""
         page = mock_playwright["page"]
+        page.evaluate.return_value = 0
         page.screenshot.side_effect = Exception("screenshot failed")
+        with patch.object(client, "_download_card_images", return_value={}):
+            with pytest.raises(MenthorQExtractionError, match="screenshot"):
+                client.get_dashboard_image("flows")
 
-        with pytest.raises(MenthorQExtractionError, match="screenshot"):
-            client.get_dashboard_image("flows")
+    def test_get_dashboard_image_uses_command_slug(self, client, mock_playwright):
+        """get_dashboard_image() passes the command as the card slug to _download_card_images."""
+        page = mock_playwright["page"]
+        page.evaluate.return_value = 1
+        with patch.object(client, "_download_card_images", return_value={"vol-models": b"\x89PNG"}) as mock_dl:
+            client.get_dashboard_image("vol-models")
+            # Verify the slugs dict uses command as both key and value
+            args = mock_dl.call_args
+            slugs = args[0][1]
+            assert "vol-models" in slugs
+            assert slugs["vol-models"] == "vol-models"
 
 
 # ══════════════════════════════════════════════════════════════════════

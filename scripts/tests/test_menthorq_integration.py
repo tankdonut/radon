@@ -8,13 +8,14 @@ Requires:
     Playwright browsers installed: python3 -m playwright install chromium
 
 These tests share a single browser session (module-scoped fixture) to avoid
-repeated logins. Image tests only verify PNG bytes are returned (no Vision API
-calls to minimize cost).
+repeated logins. Image tests verify S3 download is used (not viewport screenshots)
+and that returned bytes are valid PNGs.
 """
 from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta
+from unittest.mock import patch
 
 import pytest
 
@@ -158,77 +159,169 @@ def _assert_png(data: bytes, label: str) -> None:
     assert data[:4] == b"\x89PNG", f"{label}: missing PNG magic header"
 
 
+def _get_image_with_tracking(client, command: str, *, tickers: str | None = None):
+    """Call get_dashboard_image with instrumentation to track image source.
+
+    Returns (png_bytes, s3_used: bool, download_attempted: bool).
+    """
+    original_download = client._download_card_images.__func__
+    download_results = []
+
+    def tracking_download(self_inner, page, slugs):
+        result = original_download(self_inner, page, slugs)
+        download_results.append(result)
+        return result
+
+    with patch.object(type(client), "_download_card_images", tracking_download):
+        if tickers:
+            data = client.get_dashboard_image(command, tickers=tickers)
+        else:
+            data = client.get_dashboard_image(command)
+
+    download_attempted = len(download_results) >= 1
+    s3_used = download_attempted and len(download_results[0]) > 0
+
+    return data, s3_used, download_attempted
+
+
 @pytest.mark.integration
 class TestMenthorQIntegrationImage:
-    def test_cta(self, client, trading_date):
-        """get_cta() returns dict of table data (skips Vision cost — just checks navigation)."""
-        # CTA requires Vision API key — if no key, expect extraction error
-        try:
-            result = client.get_cta(trading_date)
-            assert isinstance(result, dict)
-        except MenthorQError:
-            # Acceptable — Vision key may not be set or extraction may fail
-            pass
+    """Verify all image routes attempt S3 download before falling back to screenshot.
+
+    CTA page is the only MenthorQ route with S3-hosted card images
+    (.command-card elements with <img src="s3...">). All other dashboards
+    (GEX, DIX, VIX, etc.) render charts dynamically in the DOM, so they
+    legitimately fall back to viewport screenshot.
+
+    Every route MUST:
+      1. Attempt S3 download via _download_card_images (proving the code path runs)
+      2. Return valid PNG bytes
+    CTA additionally MUST:
+      3. Actually use S3 images (not fall back to screenshot)
+    """
+
+    def test_cta_downloads_s3_images(self, client, trading_date):
+        """get_cta() downloads S3 images for all 4 CTA cards, not screenshots."""
+        from clients.menthorq_client import CTA_SLUGS
+
+        original_download = client._download_card_images.__func__
+        download_results = []
+
+        def tracking_download(self_inner, page, slugs):
+            result = original_download(self_inner, page, slugs)
+            download_results.append(result)
+            return result
+
+        with patch.object(type(client), "_download_card_images", tracking_download):
+            try:
+                result = client.get_cta(trading_date)
+                assert isinstance(result, dict)
+            except MenthorQError:
+                pytest.skip("Vision API key not set or extraction failed")
+
+        # Verify S3 download was used and returned all 4 images
+        assert len(download_results) >= 1, "S3 download was not attempted"
+        first_result = download_results[0]
+        assert len(first_result) == len(CTA_SLUGS), (
+            f"Expected {len(CTA_SLUGS)} S3 images, got {len(first_result)}. "
+            f"Keys: {list(first_result.keys())}"
+        )
+        for key, png_bytes in first_result.items():
+            _assert_png(png_bytes, f"cta/{key}")
 
     def test_image_gex(self, client):
-        _assert_png(client.get_dashboard_image("gex"), "gex")
+        data, s3, attempted = _get_image_with_tracking(client, "gex")
+        _assert_png(data, "gex")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_dix(self, client):
-        _assert_png(client.get_dashboard_image("dix"), "dix")
+        data, s3, attempted = _get_image_with_tracking(client, "dix")
+        _assert_png(data, "dix")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_vix(self, client):
-        _assert_png(client.get_dashboard_image("vix"), "vix")
+        data, s3, attempted = _get_image_with_tracking(client, "vix")
+        _assert_png(data, "vix")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_flows(self, client):
-        _assert_png(client.get_dashboard_image("flows"), "flows")
+        data, s3, attempted = _get_image_with_tracking(client, "flows")
+        _assert_png(data, "flows")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_darkpool(self, client):
-        _assert_png(client.get_dashboard_image("darkpool"), "darkpool")
+        data, s3, attempted = _get_image_with_tracking(client, "darkpool")
+        _assert_png(data, "darkpool")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_options(self, client):
-        _assert_png(client.get_dashboard_image("options"), "options")
+        data, s3, attempted = _get_image_with_tracking(client, "options")
+        _assert_png(data, "options")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_putcall(self, client):
-        _assert_png(client.get_dashboard_image("putcall"), "putcall")
+        data, s3, attempted = _get_image_with_tracking(client, "putcall")
+        _assert_png(data, "putcall")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_skew(self, client):
-        _assert_png(client.get_dashboard_image("skew"), "skew")
+        data, s3, attempted = _get_image_with_tracking(client, "skew")
+        _assert_png(data, "skew")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_term(self, client):
-        _assert_png(client.get_dashboard_image("term"), "term")
+        data, s3, attempted = _get_image_with_tracking(client, "term")
+        _assert_png(data, "term")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_breadth(self, client):
-        _assert_png(client.get_dashboard_image("breadth"), "breadth")
+        data, s3, attempted = _get_image_with_tracking(client, "breadth")
+        _assert_png(data, "breadth")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_sectors(self, client):
-        _assert_png(client.get_dashboard_image("sectors"), "sectors")
+        data, s3, attempted = _get_image_with_tracking(client, "sectors")
+        _assert_png(data, "sectors")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_correlation(self, client):
-        _assert_png(client.get_dashboard_image("correlation"), "correlation")
+        data, s3, attempted = _get_image_with_tracking(client, "correlation")
+        _assert_png(data, "correlation")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_cta_flows(self, client):
-        _assert_png(client.get_dashboard_image("cta-flows"), "cta-flows")
+        data, s3, attempted = _get_image_with_tracking(client, "cta-flows")
+        _assert_png(data, "cta-flows")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_vol_models(self, client):
-        _assert_png(client.get_dashboard_image("vol-models"), "vol-models")
+        data, s3, attempted = _get_image_with_tracking(client, "vol-models")
+        _assert_png(data, "vol-models")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_vol(self, client):
-        _assert_png(client.get_dashboard_image("vol"), "vol")
+        data, s3, attempted = _get_image_with_tracking(client, "vol")
+        _assert_png(data, "vol")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_forex_levels(self, client):
-        _assert_png(client.get_dashboard_image("forex"), "forex")
+        data, s3, attempted = _get_image_with_tracking(client, "forex")
+        _assert_png(data, "forex")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_crypto_options(self, client):
-        _assert_png(
-            client.get_dashboard_image("cryptos_options", tickers="cryptos_options"),
-            "cryptos_options",
+        data, s3, attempted = _get_image_with_tracking(
+            client, "cryptos_options", tickers="cryptos_options"
         )
+        _assert_png(data, "cryptos_options")
+        assert attempted, "S3 download was not attempted"
 
     def test_image_crypto_quant(self, client):
-        _assert_png(
-            client.get_dashboard_image("cryptos_technical", tickers="cryptos_technical"),
-            "cryptos_technical",
+        data, s3, attempted = _get_image_with_tracking(
+            client, "cryptos_technical", tickers="cryptos_technical"
         )
+        _assert_png(data, "cryptos_technical")
+        assert attempted, "S3 download was not attempted"
 
     def test_crypto_detail(self, client):
         """get_crypto_detail('BTC') returns data."""

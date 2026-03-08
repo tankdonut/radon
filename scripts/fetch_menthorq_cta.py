@@ -15,6 +15,7 @@ Usage:
     python3 scripts/fetch_menthorq_cta.py              # Fetch + cache + print summary
     python3 scripts/fetch_menthorq_cta.py --json        # JSON to stdout
     python3 scripts/fetch_menthorq_cta.py --date 2026-03-06  # Specific date
+    python3 scripts/fetch_menthorq_cta.py --force --save-images  # Re-fetch + save S3 PNGs to tmp/
 """
 from __future__ import annotations
 
@@ -144,7 +145,7 @@ def write_cache(date_str: str, tables: Dict[str, List[Dict]]) -> Path:
     entry = {
         "date": date_str,
         "fetched_at": datetime.now(timezone.utc).isoformat(),
-        "source": "menthorq_vision",
+        "source": "menthorq_s3_vision",
         "tables": tables,
     }
     p = cache_path(date_str)
@@ -160,8 +161,15 @@ def fetch_menthorq_cta(
     date_str: Optional[str] = None,
     force: bool = False,
     headless: bool = True,
+    save_images: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """Fetch MenthorQ CTA data: check cache, use client to extract, cache.
+
+    Args:
+        date_str: Date to fetch (YYYY-MM-DD). Defaults to today.
+        force: Bypass cache and re-fetch.
+        headless: Run browser in headless mode.
+        save_images: Save raw S3 PNGs to tmp/ for visual verification.
 
     Returns the full cache entry dict, or None on failure.
     """
@@ -181,6 +189,18 @@ def fetch_menthorq_cta(
 
         with MenthorQClient(headless=headless) as client:
             tables = client.get_cta(date_str)
+
+            # After get_cta(), page is still on CTA — download images for verification
+            if save_images:
+                from clients.menthorq_client import CTA_SLUGS
+                images = client._download_card_images(client._page, CTA_SLUGS)
+                if images:
+                    tmp_dir = _PROJECT_DIR / "tmp"
+                    tmp_dir.mkdir(parents=True, exist_ok=True)
+                    for key, png_bytes in images.items():
+                        out = tmp_dir / f"menthorq-cta-{key}.png"
+                        out.write_bytes(png_bytes)
+                        print(f"  Saved: {out} ({len(png_bytes):,} bytes)", file=sys.stderr)
 
     except MenthorQError as exc:
         print(f"  ERROR: {exc}", file=sys.stderr)
@@ -304,6 +324,7 @@ Examples:
     parser.add_argument("--date", help="Date to fetch (YYYY-MM-DD, default: today)")
     parser.add_argument("--force", action="store_true", help="Bypass cache, force re-fetch")
     parser.add_argument("--no-headless", action="store_true", help="Show browser (debug)")
+    parser.add_argument("--save-images", action="store_true", help="Save raw S3 PNGs to tmp/ for verification")
 
     args = parser.parse_args()
 
@@ -318,6 +339,7 @@ Examples:
         date_str=date_str,
         force=args.force,
         headless=not args.no_headless,
+        save_images=args.save_images,
     )
     elapsed = time.time() - t_start
 

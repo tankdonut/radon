@@ -112,7 +112,7 @@ class TestCacheReadWrite:
         result = read_cache("2026-03-07")
         assert result is not None
         assert result["date"] == "2026-03-07"
-        assert result["source"] == "menthorq_vision"
+        assert result["source"] == "menthorq_s3_vision"
         assert len(result["tables"]["main"]) == 4
         assert len(result["tables"]["index"]) == 2
 

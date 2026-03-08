@@ -297,7 +297,11 @@ class MenthorQClient:
     # ── CTA ─────────────────────────────────────────────────────
 
     def get_cta(self, date: str) -> Dict[str, List[Dict[str, Any]]]:
-        """Fetch CTA positioning data via screenshot + Vision extraction.
+        """Fetch CTA positioning data via S3 image download + Vision extraction.
+
+        Downloads full-resolution PNGs from S3 (linked inside each card's
+        ``<a class="lightbox"><img src="...">``), then sends those to Vision.
+        Falls back to card screenshots if S3 download fails.
 
         Args:
             date: Date string YYYY-MM-DD
@@ -321,14 +325,28 @@ class MenthorQClient:
             "date": date,
         })
 
-        screenshots = self._screenshot_cards(self._page, CTA_SLUGS)
-        if not screenshots:
+        # Wait for card images to render (dynamic content, up to 30s)
+        for _ in range(10):
+            count = self._page.evaluate(
+                "() => document.querySelectorAll('.command-card img').length"
+            )
+            if count >= len(CTA_SLUGS):
+                break
+            time.sleep(3)
+
+        # Try S3 download first, fall back to screenshots
+        images = self._download_card_images(self._page, CTA_SLUGS)
+        if not images:
+            logger.warning("S3 download failed, falling back to card screenshots")
+            images = self._screenshot_cards(self._page, CTA_SLUGS)
+
+        if not images:
             raise MenthorQExtractionError(
-                f"No CTA card screenshots captured for {date}."
+                f"No CTA card images captured for {date}."
             )
 
         tables: Dict[str, List[Dict]] = {}
-        for table_key, png_bytes in screenshots.items():
+        for table_key, png_bytes in images.items():
             extracted = self._extract_via_vision(png_bytes, _CTA_EXTRACTION_PROMPT)
             if extracted:
                 tables[table_key] = extracted
@@ -387,7 +405,11 @@ class MenthorQClient:
     def get_dashboard_image(
         self, command: str, *, tickers: str | None = None
     ) -> bytes:
-        """Screenshot a dashboard page and return PNG bytes.
+        """Fetch a dashboard image, preferring S3 download over screenshot.
+
+        Navigates to the dashboard page, then tries to download the
+        full-resolution S3 image from the command card. Falls back to a
+        viewport screenshot if no S3 image is available.
 
         Covers GEX, DIX, VIX, flows, dark pool, options, put/call, skew,
         term structure, breadth, sectors, correlation, CTA flows, vol models,
@@ -398,10 +420,10 @@ class MenthorQClient:
             tickers: Optional tickers param (needed for crypto routes).
 
         Returns:
-            PNG screenshot bytes of the dashboard viewport.
+            PNG image bytes (S3 original or viewport screenshot).
 
         Raises:
-            MenthorQExtractionError: If screenshot capture fails.
+            MenthorQExtractionError: If neither S3 download nor screenshot succeeds.
         """
         params: Dict[str, str] = {
             "action": "data",
@@ -413,6 +435,27 @@ class MenthorQClient:
 
         self._navigate(params)
 
+        # Wait for card images to render (up to 15s)
+        for _ in range(5):
+            count = self._page.evaluate(
+                "() => document.querySelectorAll('.command-card img').length"
+            )
+            if count >= 1:
+                break
+            time.sleep(3)
+
+        # Try S3 download first
+        slugs = {command: command}
+        images = self._download_card_images(self._page, slugs)
+        if images:
+            png = next(iter(images.values()))
+            logger.info(f"Dashboard S3 image: {command} ({len(png):,} bytes)")
+            return png
+
+        # Fall back to viewport screenshot
+        logger.warning(
+            f"No S3 image for {command}, falling back to viewport screenshot"
+        )
         try:
             png = self._page.screenshot(type="png", full_page=False)
         except Exception as exc:
@@ -657,6 +700,62 @@ class MenthorQClient:
             return data;
         }""")
         return result if isinstance(result, dict) else {}
+
+    def _download_card_images(
+        self, page: Page, slugs: Dict[str, str]
+    ) -> Dict[str, bytes]:
+        """Download full-resolution S3 images from CTA card elements.
+
+        Each card contains ``<a class="lightbox"><img src="https://...s3...">``
+        with the original high-res PNG. Downloads those directly via httpx
+        instead of screenshotting the tiny card thumbnail.
+
+        Args:
+            page: Current Playwright page.
+            slugs: Mapping of key names to data-command-slug values.
+
+        Returns:
+            Dict mapping key names to PNG bytes for each downloaded image.
+            Returns empty dict if any image fails (caller should fall back).
+        """
+        import httpx
+
+        images: Dict[str, bytes] = {}
+        for key, slug in slugs.items():
+            try:
+                img_src = page.evaluate(
+                    """(slug) => {
+                        const card = document.querySelector(
+                            `.command-card[data-command-slug="${slug}"]`
+                        ) || document.querySelector(
+                            `[data-command-slug="${slug}"]`
+                        );
+                        if (!card) return null;
+                        const img = card.querySelector('img');
+                        return img ? img.src : null;
+                    }""",
+                    slug,
+                )
+                if not img_src:
+                    logger.warning(f"No img src found for card slug: {slug}")
+                    return {}
+
+                resp = httpx.get(img_src, timeout=30.0)
+                if resp.status_code != 200:
+                    logger.warning(
+                        f"S3 download failed for {slug}: HTTP {resp.status_code}"
+                    )
+                    return {}
+
+                images[key] = resp.content
+                logger.info(
+                    f"Downloaded S3 image: {key} ({len(resp.content):,} bytes)"
+                )
+            except Exception as exc:
+                logger.warning(f"S3 download error for {slug}: {exc}")
+                return {}
+
+        return images
 
     def _screenshot_cards(
         self, page: Page, slugs: Dict[str, str]

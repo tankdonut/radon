@@ -117,7 +117,8 @@ TZ=America/New_York date +"%A %H:%M"   # Check if market open (9:30–16:00 ET, 
 | `scripts/fetch_x_watchlist.py` | X account tweet sentiment |
 | `scripts/vcg_scan.py` | Volatility-Credit Gap divergence scanner |
 | `scripts/cri_scan.py` | Crash Risk Index — CTA deleveraging detection |
-| `scripts/fetch_menthorq_cta.py` | MenthorQ CTA positioning (browser + Vision extraction) |
+| `scripts/fetch_menthorq_cta.py` | MenthorQ CTA positioning (S3 image download + Vision extraction) |
+| `scripts/fetch_menthorq_dashboard.py` | MenthorQ dashboard charts (S3 download → screenshot fallback + Vision) |
 | `scripts/setup_ibc.sh` | IBC Gateway service manager (install/uninstall/status/logs/start/stop) |
 
 ---
@@ -132,7 +133,8 @@ TZ=America/New_York date +"%A %H:%M"   # Check if market open (9:30–16:00 ET, 
 | `data/ticker_cache.json` | Ticker → company name cache |
 | `data/reconciliation.json` | IB reconciliation results |
 | `data/seasonality_cache/{TICKER}.json` | Cached seasonality (UW + EquityClock Vision fallback) |
-| `data/menthorq_cache/cta_{DATE}.json` | Cached MenthorQ CTA positioning (daily, Vision-extracted) |
+| `data/menthorq_cache/cta_{DATE}.json` | Cached MenthorQ CTA positioning (daily, S3 image + Vision) |
+| `data/menthorq_cache/{command}_{DATE}.json` | Cached MenthorQ dashboard data (S3/screenshot + Vision) |
 
 ---
 
