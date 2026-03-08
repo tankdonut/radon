@@ -1,9 +1,12 @@
 # Status & Decision Log
 
 ## Last Updated
-2026-03-06T11:48:00-08:00
+2026-03-07T16:00:00-08:00
 
 ## Recent Commits
+- 2026-03-07 16:00:00 -0800 — **fix: Enforce data source priority (IB → UW → Yahoo) in all scanners. Add UW OHLC fallback to CRI, VCG, GARCH, LEAP scanners. Yahoo is LAST RESORT only.**
+- 2026-03-07 15:36:00 -0800 — feat: Add MenthorQ client Phase 2 methods + full integration tests
+- 2026-03-07 08:20:00 -0800 — feat: Add realtime price chart to ticker detail modal
 - 2026-03-06 09:47:00 -0800 — **feat: Context engineering pipeline — persistent memory across sessions (Constructor + Evaluator, 7 facts seeded, auto-loads at startup)**
 - 2026-03-06 09:32:00 -0800 — fix: Move undefined risk table above equity positions on portfolio page
 - 2026-03-06 09:28:00 -0800 — **feat: Portfolio report — self-contained IB + dark pool fetch, today-highlighted sparklines, HTML template**
@@ -410,6 +413,7 @@ Click any ticker across all 6 table sections → 720px modal with:
 12. ~~News tab fails silently when UW rate-limited~~ **FIXED** — `/api/ticker/news` route now falls back to Yahoo Finance RSS when UW returns 429. Both sources handle failure gracefully with user-facing error message.
 13. ~~RatingsTab shows raw/empty data from UW API~~ **FIXED** — Complete rewrite to properly map nested UW response structure (`ratings.buy`, `target_price.mean`, `upgrade_downgrade_history`). Now shows buy/sell percentages, visual distribution bar, price targets with upside/downside calculation, and analyst actions table with firm name and grade.
 14. **Data normalization rule**: All data files (watchlist.json, discover.json) must use `"ticker"` as the canonical key, never `"symbol"`. Scripts that read these files handle both for backward compatibility.
+15. ~~CRI/VCG/GARCH/LEAP scanners skip UW, fall back IB → Yahoo~~ **FIXED** — All scanners now use IB → UW → Yahoo priority. UW OHLC serves stocks/ETFs. Yahoo only for VIX/VVIX (indices UW cannot serve).
 
 ## Follow-ups
 - [x] Implement trade blotter service

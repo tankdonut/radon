@@ -12,7 +12,10 @@ Strategy spec:              docs/strategies.md (Strategy 5)
 Data sources (priority order):
   1. Interactive Brokers — Index('VIX','CBOE'), Index('VVIX','CBOE'),
      Stock('HYG','SMART','USD')
-  2. Yahoo Finance fallback — ^VIX, ^VVIX, HYG
+  2. Unusual Whales — OHLC for stocks/ETFs (HYG, JNK, LQD).
+     Does NOT support VIX/VVIX indices.
+  3. Yahoo Finance — ABSOLUTE LAST RESORT. Only for VIX/VVIX when
+     IB unavailable (UW cannot serve index data).
 
 Usage:
     python3 scripts/vcg_scan.py                 # Human-readable summary
@@ -107,8 +110,52 @@ def _fetch_ib(tickers: List[str]) -> Dict[str, List[Tuple[str, float]]]:
     return results
 
 
+def _fetch_uw(tickers: List[str]) -> Dict[str, List[Tuple[str, float]]]:
+    """Fetch 1Y daily bars from Unusual Whales OHLC endpoint.
+
+    UW supports stocks and ETFs but NOT indices (VIX, VVIX).
+    Returns {ticker: [(date_str, close), ...]} for successful fetches.
+    """
+    try:
+        from clients.uw_client import UWClient
+    except ImportError:
+        return {}
+
+    # UW cannot serve index data
+    INDEX_TICKERS = {"VIX", "VVIX"}
+    fetchable = [t for t in tickers if t not in INDEX_TICKERS]
+    if not fetchable:
+        return {}
+
+    results: Dict[str, List[Tuple[str, float]]] = {}
+    try:
+        with UWClient() as uw:
+            for ticker in fetchable:
+                try:
+                    data = uw.get_stock_ohlc(ticker, candle_size="1d")
+                    bars = data.get("data", [])
+                    if bars:
+                        parsed = [
+                            (b["date"], float(b["close"]))
+                            for b in bars
+                            if b.get("close") is not None
+                        ]
+                        if parsed:
+                            results[ticker] = parsed
+                            print(f"  UW: {ticker} — {len(parsed)} bars", file=sys.stderr)
+                except Exception as exc:
+                    print(f"  UW: {ticker} failed — {exc}", file=sys.stderr)
+    except Exception as exc:
+        print(f"  UW connection failed — {exc}", file=sys.stderr)
+
+    return results
+
+
 def _fetch_yahoo(ticker: str, days: int = 400) -> List[Tuple[str, float]]:
-    """Fetch daily bars from Yahoo Finance.  Returns [(date_str, close), ...]."""
+    """ABSOLUTE LAST RESORT: Fetch daily bars from Yahoo Finance.
+
+    Returns [(date_str, close), ...].
+    """
     yahoo_sym = YAHOO_TICKERS.get(ticker, ticker)
     end = int(datetime.now().timestamp())
     start = int((datetime.now() - timedelta(days=days)).timestamp())
@@ -135,24 +182,42 @@ def _fetch_yahoo(ticker: str, days: int = 400) -> List[Tuple[str, float]]:
 
 
 def fetch_all(tickers: List[str]) -> Dict[str, np.ndarray]:
-    """Fetch close prices for all tickers.  IB first, Yahoo fallback.
+    """Fetch close prices for all tickers.
 
+    Priority: IB (concurrent) → UW (stocks/ETFs) → Yahoo (LAST RESORT).
     Returns {ticker: np.array of closes} aligned by date intersection.
     """
-    # Try IB first
+    # Priority 1: Interactive Brokers
     print("  Attempting IB connection...", file=sys.stderr)
     ib_data = _fetch_ib(tickers)
 
-    # Yahoo fallback for any missing
     raw: Dict[str, List[Tuple[str, float]]] = {}
+    fallback_needed: List[str] = []
+
     for t in tickers:
         if t in ib_data and len(ib_data[t]) >= MIN_BARS:
             raw[t] = ib_data[t]
-            continue
-        if t in ib_data:
-            print(f"  IB: {t} only {len(ib_data[t])} bars (need {MIN_BARS}), trying Yahoo", file=sys.stderr)
         else:
-            print(f"  Falling back to Yahoo for {t}", file=sys.stderr)
+            if t in ib_data:
+                print(f"  IB: {t} only {len(ib_data[t])} bars (need {MIN_BARS}), trying fallbacks", file=sys.stderr)
+            fallback_needed.append(t)
+
+    # Priority 2: Unusual Whales (stocks/ETFs only, not VIX/VVIX)
+    if fallback_needed:
+        print("  Trying Unusual Whales for fallback tickers...", file=sys.stderr)
+        uw_data = _fetch_uw(fallback_needed)
+        still_needed: List[str] = []
+        for t in fallback_needed:
+            if t in uw_data and len(uw_data[t]) >= MIN_BARS:
+                raw[t] = uw_data[t]
+            else:
+                still_needed.append(t)
+        fallback_needed = still_needed
+
+    # Priority 3 (LAST RESORT): Yahoo Finance
+    for t in fallback_needed:
+        print(f"  LAST RESORT: Yahoo for {t}", file=sys.stderr)
+        time.sleep(0.5)  # Rate limit Yahoo
         yahoo = _fetch_yahoo(t)
         if yahoo:
             raw[t] = yahoo

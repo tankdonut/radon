@@ -63,6 +63,16 @@ All IB and UW access goes through centralized clients in `scripts/clients/`:
 - Log NO_TRADE decisions to docs/status.md (Recent Evaluations section)
 - Include timestamp, ticker, decision, and rationale
 
+### 5B. Strategy Registry Sync (MANDATORY)
+- **`data/strategies.json` MUST stay in sync with `docs/strategies.md`**
+- When a new strategy is added to `docs/strategies.md`, IMMEDIATELY add a corresponding entry to `data/strategies.json`
+- When a strategy is modified (status, commands, instruments, etc.), update both files
+- When a strategy is deprecated/removed, update both files
+- **Required fields per strategy**: `id`, `name`, `status`, `description`, `edge`, `instruments`, `hold_period`, `win_rate`, `target_rr`, `risk_type`, `commands`, `doc`
+- Optional fields: `manager_override` (only for undefined-risk strategies)
+- After any change, validate: `python3 -m json.tool data/strategies.json`
+- The `strategies` command reads `data/strategies.json` — if it's stale, users see outdated info
+
 ### 6. Verification Commands
 After any trade decision:
 ```bash

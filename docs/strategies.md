@@ -1,8 +1,10 @@
 # Trading Strategies
 
+> **⚠️ Registry sync:** This file is the source of truth. When adding or modifying a strategy here, also update `data/strategies.json` (the machine-readable registry read by the `strategies` command). See `docs/implement.md` § 5B.
+
 ## Overview
 
-The Convex Scavenger employs four strategies, each exploiting informational or structural advantages that institutional players leave behind.
+The Convex Scavenger employs six strategies, each exploiting informational or structural advantages that institutional players leave behind.
 
 | Strategy | Edge Source | Instrument | Timeframe | Risk Profile |
 |----------|-------------|------------|-----------|--------------|
@@ -733,6 +735,16 @@ Rolling 20-day average of 55 pairwise correlations across 11 SPDR sector ETFs:
 XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLV, XLY.
 
 Uses daily returns and `np.corrcoef` on rolling windows.
+
+#### Why 11 Sector ETFs, Not 503 S&P 500 Stocks
+
+The CRI correlation component measures whether **institutions are selling across sectors simultaneously** — the signature of systematic CTA deleveraging. Sector ETFs are the correct instrument for this signal. Using all 503 S&P 500 constituents would degrade the signal for three reasons:
+
+1. **Idiosyncratic noise drowns the signal.** Individual stocks have earnings, M&A, guidance, and analyst revisions that move prices independently of systematic flows. A pharma stock dropping on a failed trial is not a CTA sell signal. Sector ETFs wash out single-name noise by construction — if XLV (Health Care) drops, it's sector-wide selling, not one stock.
+
+2. **Sector count imbalance biases the measurement.** The S&P 500 has ~71 tech stocks but only ~7 energy stocks. Raw pairwise correlation across 503 stocks (126,253 pairs) would be dominated by intra-tech pairs correlating with each other — which they always do regardless of crash regime. You'd need to weight by sector to correct this, which converges back to sector-level measurement.
+
+3. **The 0.60 trigger threshold is calibrated to sector ETFs.** The crash trigger condition (avg correlation > 0.60) was derived from historical crash episodes (2008, 2020, 2022) using 11-ETF pairwise correlations. Changing the input universe changes the distribution of correlations and invalidates the threshold.
 
 ### Position Structure (when Crash Trigger fires)
 

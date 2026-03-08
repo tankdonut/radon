@@ -124,6 +124,34 @@ When market is closed, free trade analysis explicitly shows it's using closing p
 | `vcg` | **VCG scan — call `vcg_scan` tool (registered Pi tool).** Do NOT re-read strategy docs. |
 | `strategies` | List available trading strategies (reads `data/strategies.json`) |
 
+### ⚠️ Strategy Registry Sync (MANDATORY)
+
+**`data/strategies.json` is the machine-readable registry. `docs/strategies.md` is the source of truth.**
+
+When adding, modifying, or removing a strategy in `docs/strategies.md`, **ALWAYS update `data/strategies.json` in the same action.** The `strategies` command reads the JSON file — if it's stale, users see outdated info.
+
+**Required fields per entry:**
+```json
+{
+  "id": "kebab-case-id",
+  "name": "Human-Readable Name",
+  "status": "active",
+  "description": "One-paragraph description",
+  "edge": "What structural advantage this exploits",
+  "instruments": "What you trade and expiry range",
+  "hold_period": "Typical hold duration",
+  "win_rate": "Expected win rate or N/A for overlays",
+  "target_rr": "Risk:reward target",
+  "risk_type": "defined or undefined",
+  "commands": ["command1", "command2"],
+  "doc": "docs/strategies.md or specific doc file"
+}
+```
+
+**Optional:** `"manager_override": true` (only for undefined-risk strategies).
+
+**After any change:** `python3 -m json.tool data/strategies.json`
+
 ### Evaluate Command Details
 
 When user runs `evaluate [TICKER]`, ALWAYS:
@@ -311,7 +339,7 @@ python3 scripts/risk_reversal.py IWM --json
 
 **When user runs `vcg`, ALWAYS call the `vcg_scan` Pi tool. Do NOT read `docs/strategies.md` or `docs/cross_asset_volatility_credit_gap_spec_(VCG).md`. The tool returns all data needed.**
 
-The `vcg_scan` tool runs `scripts/vcg_scan.py --json` which fetches 1Y daily bars for VIX, VVIX, HYG (IB primary, Yahoo fallback), computes the rolling 21-day OLS regression, and returns the full signal.
+The `vcg_scan` tool runs `scripts/vcg_scan.py --json` which fetches 1Y daily bars for VIX, VVIX, HYG (IB → UW → Yahoo LAST RESORT), computes the rolling 21-day OLS regression, and returns the full signal.
 
 **Interpretation rules (memorize — do not look up):**
 
@@ -1578,6 +1606,7 @@ Save a fact after any of these events:
 | `data/watchlist.json` | Tickers under surveillance with flow signals |
 | `data/portfolio.json` | Open positions, entry prices, Kelly sizes, expiry dates |
 | `data/trade_log.json` | Executed trades only (append-only) |
+| `data/strategies.json` | **Strategy registry — MUST stay in sync with `docs/strategies.md`** |
 | `data/ticker_cache.json` | Local cache of ticker → company name mappings |
 | `data/analyst_ratings_cache.json` | Cached analyst ratings data |
 | `data/presets/` | **150 strategy-agnostic ticker presets** (SP500, NDX100, R2K) |
@@ -1598,7 +1627,7 @@ Save a fact after any of these events:
 | `docs/plans.md` | Milestone workflow with validation steps |
 | `docs/implement.md` | Execution runbook |
 | `docs/status.md` | Current state, recent decisions, audit log |
-| `docs/strategies.md` | Trading strategies (Dark Pool Flow, LEAP IV Mispricing, GARCH Convergence) |
+| `docs/strategies.md` | **Source of truth for all 6 trading strategies** (Dark Pool Flow, LEAP IV, GARCH Convergence, Risk Reversal, VCG, CRI) |
 | `docs/strategy-garch-convergence.md` | GARCH Convergence Spreads full specification |
 | `docs/options-flow-verification.md` | **How to verify options flow claims via OI** |
 | `docs/unusual_whales_api.md` | **Unusual Whales API quick reference** |

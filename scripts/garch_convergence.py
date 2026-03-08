@@ -132,10 +132,22 @@ class PairAnalysis:
         ])
 
 
-# ── Yahoo Finance HV fetch ───────────────────────────────────────
+# ── Price data fetch (UW primary, Yahoo LAST RESORT) ─────────────
+
+def _fetch_uw_prices(ticker: str, uw_client: UWClient) -> List[float]:
+    """Fetch daily closes from Unusual Whales OHLC. Returns list of floats."""
+    try:
+        data = uw_client.get_stock_ohlc(ticker, candle_size="1d")
+        bars = data.get("data", [])
+        if bars:
+            return [float(b["close"]) for b in bars if b.get("close") is not None]
+    except Exception:
+        pass
+    return []
+
 
 def _fetch_yahoo_prices(ticker: str, days: int = 400) -> List[float]:
-    """Fetch daily closes from Yahoo. Returns list of floats."""
+    """ABSOLUTE LAST RESORT: Fetch daily closes from Yahoo. Returns list of floats."""
     end = int(datetime.now().timestamp())
     start = int((datetime.now() - timedelta(days=days)).timestamp())
     url = (
@@ -150,6 +162,15 @@ def _fetch_yahoo_prices(ticker: str, days: int = 400) -> List[float]:
         return [c for c in closes if c is not None]
     except Exception:
         return []
+
+
+def _fetch_prices(ticker: str, uw_client: UWClient) -> List[float]:
+    """Fetch daily closes: UW primary, Yahoo LAST RESORT."""
+    prices = _fetch_uw_prices(ticker, uw_client)
+    if len(prices) >= 60:
+        return prices
+    # LAST RESORT
+    return _fetch_yahoo_prices(ticker)
 
 
 def _calc_hv(prices: List[float], period: int) -> float:
@@ -222,8 +243,8 @@ def fetch_ticker_vol(ticker: str, uw_client: UWClient) -> TickerVol:
     """Fetch all vol data for one ticker. Thread-safe (uses shared UWClient session)."""
     tv = TickerVol(ticker=ticker)
 
-    # Yahoo prices (blocking I/O — but runs in thread pool)
-    prices = _fetch_yahoo_prices(ticker)
+    # Prices: UW primary, Yahoo LAST RESORT (blocking I/O — runs in thread pool)
+    prices = _fetch_prices(ticker, uw_client)
     if len(prices) < 60:
         tv.error = "Insufficient price data"
         return tv
@@ -645,7 +666,7 @@ def generate_html(
     body_parts.append(
         f'<div class="footer">'
         f"<strong>GARCH Convergence Spread Scan</strong> · {total_tickers} tickers · {len(pairs)} pairs<br>"
-        f"Data: Yahoo Finance (HV) · Unusual Whales (LEAP IV, IV Rank)<br>"
+        f"Data: Unusual Whales (HV, LEAP IV, IV Rank) · Yahoo Finance (LAST RESORT fallback)<br>"
         f"Strategy spec: <code>docs/strategy-garch-convergence.md</code> · {now}<br><br>"
         f"<em>{'No trades recommended.' if actionable == 0 else f'{actionable} actionable pair(s) found.'}</em></div>"
     )

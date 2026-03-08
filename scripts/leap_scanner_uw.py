@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-LEAP IV Mispricing Scanner (Unusual Whales + Yahoo Finance)
+LEAP IV Mispricing Scanner (Unusual Whales primary)
 
-Uses Yahoo Finance for historical volatility calculation and
-Unusual Whales for LEAP option IV data.
+Uses Unusual Whales for OHLC price data (HV calculation) and
+LEAP option IV data. Yahoo Finance as ABSOLUTE LAST RESORT
+for price data when UW fails.
 
 No IB connection required.
 
@@ -215,8 +216,24 @@ class ScanResult:
     is_mispriced: bool
 
 
+def get_uw_history(ticker: str, uw_client: Optional[UWClient] = None) -> List[float]:
+    """Fetch historical daily closes from Unusual Whales OHLC endpoint."""
+    try:
+        if uw_client:
+            data = uw_client.get_stock_ohlc(ticker, candle_size="1d")
+        else:
+            with UWClient() as client:
+                data = client.get_stock_ohlc(ticker, candle_size="1d")
+        bars = data.get("data", [])
+        if bars:
+            return [float(b["close"]) for b in bars if b.get("close") is not None]
+    except Exception:
+        pass
+    return []
+
+
 def get_yahoo_history(ticker: str, days: int = 400) -> List[float]:
-    """Fetch historical daily closes from Yahoo Finance."""
+    """ABSOLUTE LAST RESORT: Fetch historical daily closes from Yahoo Finance."""
     end = int(datetime.now().timestamp())
     start = int((datetime.now() - timedelta(days=days)).timestamp())
     
@@ -234,6 +251,15 @@ def get_yahoo_history(ticker: str, days: int = 400) -> List[float]:
     except Exception as e:
         print(f"  ⚠ Yahoo Finance error for {ticker}: {e}")
         return []
+
+
+def get_price_history(ticker: str, uw_client: Optional[UWClient] = None) -> List[float]:
+    """Fetch daily closes: UW primary, Yahoo ABSOLUTE LAST RESORT."""
+    prices = get_uw_history(ticker, uw_client)
+    if len(prices) >= 60:
+        return prices
+    # LAST RESORT
+    return get_yahoo_history(ticker)
 
 
 def calculate_hv(prices: List[float], period: int) -> Optional[float]:
@@ -257,9 +283,9 @@ def calculate_hv(prices: List[float], period: int) -> Optional[float]:
     return daily_vol * math.sqrt(252) * 100
 
 
-def get_vol_data(ticker: str) -> Optional[VolData]:
+def get_vol_data(ticker: str, uw_client: Optional[UWClient] = None) -> Optional[VolData]:
     """Get historical volatility data for a ticker."""
-    prices = get_yahoo_history(ticker, days=400)
+    prices = get_price_history(ticker, uw_client)
     
     if len(prices) < 60:
         print(f"  ⚠ Insufficient price data for {ticker}")
@@ -400,17 +426,17 @@ def scan_ticker(ticker: str, min_gap: float) -> Optional[ScanResult]:
     print(f"Scanning {ticker}")
     print(f"{'='*50}")
 
-    # Get historical volatility
-    vol_data = get_vol_data(ticker)
-    if not vol_data:
-        return None
-
-    print(f"  Price: ${vol_data.price:.2f}")
-    print(f"  HV20: {vol_data.hv_20:.1f}% | HV60: {vol_data.hv_60:.1f}% | HV252: {vol_data.hv_252:.1f}%")
-    print(f"  Avg HV: {vol_data.avg_hv:.1f}%")
-
     # Get current IV and LEAP options using shared client
     with UWClient() as client:
+        # Get historical volatility (UW primary, Yahoo LAST RESORT)
+        vol_data = get_vol_data(ticker, uw_client=client)
+        if not vol_data:
+            return None
+
+        print(f"  Price: ${vol_data.price:.2f}")
+        print(f"  HV20: {vol_data.hv_20:.1f}% | HV60: {vol_data.hv_60:.1f}% | HV252: {vol_data.hv_252:.1f}%")
+        print(f"  Avg HV: {vol_data.avg_hv:.1f}%")
+
         current_iv, iv_rank = get_current_iv(ticker, _client=client)
         print(f"  Current IV: {current_iv:.1f}% | IV Rank: {iv_rank:.1f}")
 
@@ -603,7 +629,7 @@ def generate_report(results: List[ScanResult], min_gap: float) -> str:
   
   <div class="section">
     <div class="section-header" style="color: var(--muted)">
-      Generated {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} | HV from Yahoo Finance | IV from Unusual Whales
+      Generated {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} | Data: Unusual Whales (HV, IV) · Yahoo Finance (LAST RESORT fallback)
     </div>
   </div>
 </body>
@@ -614,7 +640,7 @@ def generate_report(results: List[ScanResult], min_gap: float) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="LEAP IV Mispricing Scanner (UW + Yahoo Finance)",
+        description="LEAP IV Mispricing Scanner (UW primary, Yahoo LAST RESORT)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     
@@ -669,7 +695,7 @@ def main():
     print(f"{'='*60}")
     print(f"Tickers: {', '.join(tickers)}")
     print(f"Min Gap: {args.min_gap}%")
-    print(f"Data: Yahoo Finance (HV) + Unusual Whales (IV)")
+    print(f"Data: Unusual Whales (HV, IV) · Yahoo Finance (LAST RESORT fallback)")
     
     results = []
     for ticker in tickers:
