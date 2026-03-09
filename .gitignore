@@ -102,6 +102,13 @@ data/*.bak
 
 # Ticker/market data caches (regenerated at runtime)
 data/ticker_cache.json
+data/company_info_cache/
+data/cri_scheduled/
+data/menthorq_cache/
+data/seasonality_cache/
+
+# Temp files
+tmp/
 
 # =============================================================================
 # Vendor (downloaded binaries, not checked in)
