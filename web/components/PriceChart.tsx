@@ -10,11 +10,13 @@ interface PriceChartProps {
   prices: Record<string, PriceData>;
   /** Override the price key used for charting (e.g. option contract key instead of underlying) */
   priceKey?: string;
+  /** Theme forwarded from the shell — defaults to 'dark' to preserve existing behavior */
+  theme?: "dark" | "light";
 }
 
-export default function PriceChart({ ticker, prices, priceKey }: PriceChartProps) {
+export default function PriceChart({ ticker, prices, priceKey, theme = "dark" }: PriceChartProps) {
   const chartKey = priceKey ?? ticker;
-  const { data, value, loading } = usePriceHistory(chartKey, prices);
+  const { data, value, loading, isMid } = usePriceHistory(chartKey, prices);
 
   const priceData = prices[chartKey];
   const closePrice = priceData?.close ?? null;
@@ -31,10 +33,15 @@ export default function PriceChart({ ticker, prices, priceKey }: PriceChartProps
 
   return (
     <div className="price-chart-container">
+      {isMid && (
+        <div className="price-chart-mid-badge" aria-label="Chart values are mid price (bid+ask)/2">
+          MIDPRICE
+        </div>
+      )}
       <Liveline
         data={data}
         value={value}
-        theme="dark"
+        theme={theme}
         color={color}
         grid={true}
         badge={true}

@@ -5,10 +5,39 @@ import type { LivelinePoint } from "liveline";
 import type { PriceData } from "@/lib/pricesProtocol";
 import { generateMockHistory, getBasePrice, nextMockPrice } from "./mockPriceGenerator";
 
+/**
+ * Resolve the best available price for chart rendering.
+ *
+ * Priority:
+ *   1. `last` — actual last-trade price (positive)
+ *   2. mid = (bid + ask) / 2 — when last is absent but both sides are quoted
+ *   3. null — no usable price
+ *
+ * Returns `{ price, isMid }` so callers can surface a visual indicator when
+ * falling back to mid.
+ */
+export function resolveChartPrice(pd: PriceData | undefined): { price: number | null; isMid: boolean } {
+  if (!pd) return { price: null, isMid: false };
+
+  // Last-trade price takes full priority
+  if (pd.last != null && pd.last > 0) {
+    return { price: pd.last, isMid: false };
+  }
+
+  // Mid fallback — requires both sides of the quote
+  if (pd.bid != null && pd.ask != null) {
+    return { price: (pd.bid + pd.ask) / 2, isMid: true };
+  }
+
+  return { price: null, isMid: false };
+}
+
 interface PriceHistoryResult {
   data: LivelinePoint[];
   value: number;
   loading: boolean;
+  /** True when chart values are derived from mid price (no last-trade available). */
+  isMid: boolean;
 }
 
 /**
@@ -23,6 +52,7 @@ export function usePriceHistory(
 ): PriceHistoryResult {
   const [data, setData] = useState<LivelinePoint[]>([]);
   const [value, setValue] = useState(0);
+  const [isMid, setIsMid] = useState(false);
   const lastRealRef = useRef(0);
   const mockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPriceRef = useRef(0);
@@ -34,13 +64,16 @@ export function usePriceHistory(
     if (!ticker) {
       setData([]);
       setValue(0);
+      setIsMid(false);
       return;
     }
 
-    const base = prices[ticker]?.last ?? getBasePrice(ticker);
+    const { price: resolvedBase, isMid: baseMid } = resolveChartPrice(prices[ticker]);
+    const base = resolvedBase ?? getBasePrice(ticker);
     const seed = generateMockHistory(base, 60, 1, hashStr(ticker));
     setData(seed);
     setValue(seed[seed.length - 1]?.value ?? base);
+    setIsMid(baseMid);
     lastPriceRef.current = seed[seed.length - 1]?.value ?? base;
     lastRealRef.current = 0;
 
@@ -49,22 +82,24 @@ export function usePriceHistory(
     };
   }, [ticker]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Append real price updates
+  // Append real price updates (last-trade or mid fallback)
   useEffect(() => {
     if (!ticker) return;
     const pd = prices[ticker];
-    if (!pd?.last || pd.last <= 0) return;
+    const { price: resolved, isMid: mid } = resolveChartPrice(pd);
+    if (resolved == null) return;
 
     const now = Date.now() / 1000;
     lastRealRef.current = now;
-    lastPriceRef.current = pd.last;
+    lastPriceRef.current = resolved;
 
     setData((prev) => {
-      const next = [...prev, { time: now, value: pd.last! }];
+      const next = [...prev, { time: now, value: resolved }];
       return next.length > maxPoints ? next.slice(next.length - maxPoints) : next;
     });
-    setValue(pd.last);
-  }, [ticker, prices[ticker ?? ""]?.last, maxPoints]); // eslint-disable-line react-hooks/exhaustive-deps
+    setValue(resolved);
+    setIsMid(mid);
+  }, [ticker, prices[ticker ?? ""]?.last, prices[ticker ?? ""]?.bid, prices[ticker ?? ""]?.ask, maxPoints]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Mock tick fallback when no real data arrives
   useEffect(() => {
@@ -98,7 +133,7 @@ export function usePriceHistory(
     };
   }, [ticker, maxPoints]);
 
-  return { data, value, loading: data.length === 0 };
+  return { data, value, loading: data.length === 0, isMid };
 }
 
 /** Simple string hash for deterministic seeding per ticker. */
