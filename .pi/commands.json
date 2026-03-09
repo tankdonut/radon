@@ -2,19 +2,19 @@
   "commands": [
     {
       "command": "evaluate [TICKER]",
-      "description": "Full 7-milestone trade evaluation — fetches all data in parallel, stops at first failing gate"
+      "description": "Full 7-milestone trade evaluation \u2014 fetches all data in parallel, stops at first failing gate"
     },
     {
       "command": "scan",
-      "description": "Scan watchlist for dark pool flow signals — ranks tickers by signal strength"
+      "description": "Scan watchlist for dark pool flow signals + CRI regime overlay (crash risk, CTA exposure) \u2014 generates HTML report"
     },
     {
       "command": "discover",
-      "description": "Find new candidates — market-wide (default), targeted tickers, or presets (e.g. discover ndx100)"
+      "description": "Find new candidates \u2014 market-wide (default), targeted tickers, or presets (e.g. discover ndx100)"
     },
     {
       "command": "portfolio",
-      "description": "Generate HTML portfolio report with live IB data, dark pool flow, thesis checks — opens in browser"
+      "description": "Generate HTML portfolio report with live IB data, dark pool flow, thesis checks \u2014 opens in browser"
     },
     {
       "command": "free-trade",
@@ -30,7 +30,7 @@
     },
     {
       "command": "blotter",
-      "description": "Trade blotter — today's fills, P&L, spread grouping, commission totals"
+      "description": "Trade blotter \u2014 today's fills, P&L, spread grouping, commission totals"
     },
     {
       "command": "blotter-history",
@@ -38,31 +38,31 @@
     },
     {
       "command": "stress-test",
-      "description": "Interactive scenario stress test — asks for market scenario, models bear/base/bull P&L per position, generates HTML report with expandable detail rows"
+      "description": "Interactive scenario stress test \u2014 asks for market scenario, models bear/base/bull P&L per position, generates HTML report with expandable detail rows"
     },
     {
       "command": "risk-reversal [TICKER]",
-      "description": "IV skew risk reversal analysis — finds costless/credit directional structures, generates HTML report"
+      "description": "IV skew risk reversal analysis \u2014 finds costless/credit directional structures, generates HTML report"
     },
     {
       "command": "vcg",
-      "description": "Cross-Asset Volatility-Credit Gap scan — VIX/VVIX/HYG regression, HDR conditions, risk-off signal"
+      "description": "Cross-Asset Volatility-Credit Gap scan \u2014 VIX/VVIX/HYG regression, HDR conditions, risk-off signal"
     },
     {
       "command": "cri-scan",
-      "description": "Crash Risk Index — sector correlations, CTA exposure model, crash trigger conditions"
+      "description": "Crash Risk Index \u2014 sector correlations, CTA exposure model, crash trigger conditions"
     },
     {
       "command": "garch-convergence [TICKERS]",
-      "description": "GARCH vol divergence scan — finds pairs where implied vol diverges from realized vol (supports presets)"
+      "description": "GARCH vol divergence scan \u2014 finds pairs where implied vol diverges from realized vol (supports presets)"
     },
     {
       "command": "leap-scan [TICKERS]",
-      "description": "LEAP IV mispricing scanner — finds long-dated options where IV is cheap vs realized vol"
+      "description": "LEAP IV mispricing scanner \u2014 finds long-dated options where IV is cheap vs realized vol"
     },
     {
       "command": "seasonal [TICKERS]",
-      "description": "Seasonality assessment — monthly win rates and average returns from EquityClock"
+      "description": "Seasonality assessment \u2014 monthly win rates and average returns from EquityClock"
     },
     {
       "command": "analyst-ratings [TICKERS]",

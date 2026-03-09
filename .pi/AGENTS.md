@@ -1,5 +1,16 @@
 # Convex Scavenger — Project Instructions
 
+## ⚠️ Bug Fix Workflow — Mandatory
+
+**Red/green TDD for every bug fix, no exceptions:**
+
+1. Write a failing test that reproduces the bug (test must be RED before any code change)
+2. Implement the minimal fix
+3. Confirm the test turns GREEN
+4. For UI bugs: add a Playwright E2E test — unit tests alone are not sufficient confirmation
+
+---
+
 ## ⚠️ Data Fetching Priority (ALWAYS follow this order)
 
 When fetching ANY market data (quotes, options, fundamentals, analyst ratings, etc.):
@@ -113,7 +124,7 @@ When market is closed, free trade analysis explicitly shows it's using closing p
 | Command | Action |
 |---------|--------|
 | `evaluate [TICKER]` | **Run `python3 scripts/evaluate.py [TICKER]`** — full 7-milestone evaluation |
-| `scan` | Scan watchlist for dark pool flow signals |
+| `scan` | Scan watchlist for dark pool flow signals + CRI regime overlay — generates HTML report |
 | `discover` | Find new candidates — market-wide (default), or pass tickers/presets |
 | `portfolio` | **Generate HTML portfolio report and open in browser** |
 | `free-trade` | Analyze positions for free trade opportunities |
@@ -246,6 +257,59 @@ Describe the scenario you want to stress test. Examples:
 - `what happens if the market...`
 - `run a stress test`
 - `portfolio stress test`
+
+### Scan Command Details
+
+When user runs `scan`, execute BOTH scans in sequence and combine into a single HTML report:
+
+**Step 1 — Dark Pool Flow Scan:**
+```bash
+python3 scripts/scanner.py
+```
+Scans all watchlist tickers for dark pool flow signals. Returns scored candidates with direction, strength, sustained days, and buy ratio.
+
+**Step 2 — CRI Regime Scan:**
+```bash
+python3 scripts/cri_scan.py --json
+```
+Computes the Crash Risk Index — VIX/VVIX momentum, sector correlations, CTA exposure model. Returns regime level (LOW/ELEVATED/HIGH/CRITICAL) and crash trigger status.
+
+**Step 3 — Combine and Report:**
+Use the CRI regime data to contextualize the flow signals:
+
+| CRI Level | Regime Interpretation | Impact on Flow Signals |
+|-----------|----------------------|----------------------|
+| LOW (0-20) | Normal — vol compressed | Accumulation signals are standard positioning |
+| ELEVATED (20-40) | Caution — vol rising | Accumulation = institutions buying dips. Higher conviction signal. |
+| HIGH (40-60) | Stress — significant risk | Sustained accumulation is contrarian + high conviction. Watch for reversals. |
+| CRITICAL (60+) | Crisis — crash conditions | Signals unreliable — forced selling can overwhelm DP accumulation |
+
+**Step 4 — Generate HTML Report:**
+Use the base template (`.pi/skills/html-report/template.html`).
+Output: `reports/daily-scan-{date}.html` — auto-open in browser.
+
+**Required report sections:**
+1. Header with signal count + CRI regime pill
+2. Data freshness banner
+3. Summary metrics (6): Active Signals, Evaluate Candidates, Sustained Count, Top Score, Faded Count, **CRI Score + Level**
+4. CRI regime context callout (score, level, crash trigger status, CTA exposure)
+5. Key observations (strongest signals vs faded)
+6. Biggest score movers grid
+7. Tier 1 table (Score ≥ 60, sustained) — EVALUATE candidates
+8. Tier 2 table (Score 40-59) — WATCH
+9. Tier 3 table (Score < 40 or faded) — WEAK/REMOVE
+10. Monday evaluation priorities (accent panel)
+11. Market context panel (VIX, VVIX, HYG, CRI, crash trigger conditions)
+12. Methodology footer
+
+**CRI data in the report MUST include:**
+- CRI score and level pill (color-coded: green=LOW, amber=ELEVATED, orange=HIGH, red=CRITICAL)
+- Crash trigger: TRIGGERED or NOT TRIGGERED with 3 conditions (SPX < 100d MA, RVol > 25%, Corr > 0.60)
+- CTA model: exposure %, forced reduction %, estimated selling $B
+- VIX 5-day rate of change
+- SPX distance from 100-day MA
+
+**VIX data rule:** Use the CRI scan's VIX value (which comes from IB/UW/Yahoo in priority order). If CRI VIX differs from scanner VIX by > 1 point, note the discrepancy and use the more recent value.
 
 ### Evaluate Command Details
 
