@@ -1917,7 +1917,8 @@ tr.leg-row td {
 .price-bar-value.negative { color: var(--negative); }
 
 /* Price chart */
-.price-chart-container { height: 200px; width: 100%; border-bottom: 1px solid var(--border-dim); }
+.price-chart-container { position: relative; height: 200px; width: 100%; border-bottom: 1px solid var(--border-dim); }
+.price-chart-mid-badge { position: absolute; top: 6px; left: 8px; z-index: 10; font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--warning); border: 1px solid var(--warning); padding: 2px 5px; line-height: 1; pointer-events: none; }
 
 /* Tabs */
 .ticker-tabs { display: flex; border-bottom: 1px solid var(--border-dim); margin-bottom: 0; }
@@ -2185,9 +2186,13 @@ tr {
 
 .metric-card-clickable { cursor: pointer; }
 
+/* ── Account Metric Modal ── */
+
+.account-metric-modal .modal-content { width: 480px; max-width: 95vw; }
+
 /* ── Exposure Breakdown Modal ── */
 
-.exposure-breakdown-modal .modal-content { width: 640px; }
+.exposure-breakdown-modal .modal-content { width: 860px; max-width: 95vw; }
 
 .eb-total { margin-bottom: 12px; }
 .eb-total-value {
@@ -2417,6 +2422,15 @@ tr {
   font-size: 10px;
   color: var(--text-muted);
   margin-top: 2px;
+}
+
+.regime-strip-ts {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  opacity: 0.6;
+  margin-top: 3px;
+  letter-spacing: 0.03em;
 }
 
 /* Badge */
@@ -2775,4 +2789,103 @@ tr {
 
 .cta-table tbody tr:hover {
   background: var(--bg-hover);
+}
+
+/* ── Fills Modal ── */
+
+.fills-modal .modal-content { width: 860px; max-width: 95vw; }
+
+.fills-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.fills-empty-sub {
+  margin-top: 8px;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.fills-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.fills-table th {
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-dim);
+  font-weight: 500;
+}
+.fills-table th.text-right { text-align: right; }
+.fills-table td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border-dim);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.fills-table td.text-right { text-align: right; }
+.fills-table tbody tr:hover { background: var(--bg-hover); }
+
+.fills-side { font-weight: 600; }
+.fills-side-bot { color: var(--color-green); }
+.fills-side-sld { color: var(--color-red); }
+.fills-row-positive { background: rgba(34, 197, 94, 0.04); }
+.fills-row-negative { background: rgba(239, 68, 68, 0.04); }
+
+.fills-summary {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-dim);
+}
+.fills-summary-formula {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
+.fills-op { color: var(--text-muted); }
+.fills-label { color: var(--text-muted); }
+.fills-summary-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-dim);
+}
+.fills-total-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.fills-total-value {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* ── PnlBreakdownModal ── */
+.pnl-breakdown-modal .modal-content { width: 860px; max-width: 95vw; }
+
+/* ── PnlBreakdownModal total row ── */
+.pb-total-row {
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+.pb-total-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: 8px 12px;
 }
