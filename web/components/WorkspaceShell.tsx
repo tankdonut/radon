@@ -12,6 +12,7 @@ import { useToast } from "@/lib/useToast";
 import { useOrderActions } from "@/lib/OrderActionsContext";
 import { usePrices } from "@/lib/usePrices";
 import { useBlotter } from "@/lib/useBlotter";
+import { computeRealizedPnlFromFills } from "@/lib/realized-pnl";
 import { usePreviousClose } from "@/lib/usePreviousClose";
 import { type OptionContract, type IndexContract, optionKey, portfolioLegToContract } from "@/lib/pricesProtocol";
 import Sidebar from "@/components/Sidebar";
@@ -57,7 +58,8 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
   const { drainNotifications, setOrdersUpdater } = useOrderActions();
 
   const isOrdersPage = activeSection === "orders";
-  const { data: orders, syncing: ordersSyncing, error: ordersError, lastSync: ordersLastSync, syncNow: ordersSyncNow, updateData: updateOrdersData } = useOrders(isOrdersPage);
+  // Always fetch orders so fills are available for the Realized P&L card on all pages
+  const { data: orders, syncing: ordersSyncing, error: ordersError, lastSync: ordersLastSync, syncNow: ordersSyncNow, updateData: updateOrdersData } = useOrders(true);
 
   const orderSymbols = useMemo(
     () => (orders?.open_orders ?? []).map((o) => o.contract.symbol),
@@ -80,9 +82,16 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
     return contracts;
   }, [orders]);
 
+  const regimeStocks = useMemo(
+    () => activeSection === "regime"
+      ? ["SPY", "XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLRE", "XLU", "XLV", "XLY"]
+      : [],
+    [activeSection],
+  );
+
   const allSymbols = useMemo(
-    () => [...new Set([...portfolioSymbols, ...orderSymbols])],
-    [portfolioSymbols, orderSymbols],
+    () => [...new Set([...portfolioSymbols, ...orderSymbols, ...regimeStocks])],
+    [portfolioSymbols, orderSymbols, regimeStocks],
   );
 
   const allContracts = useMemo(
@@ -123,8 +132,16 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
   // Backfill missing previous-close from Yahoo Finance / UW for day-change calc
   const prices = usePreviousClose(rawPrices);
 
-  // Blotter for today's realized P&L
+  // Blotter (historical flex query — kept for legacy reference)
   const { data: blotterData } = useBlotter();
+
+  // Realized P&L derived from today's session fills (executed_orders), not IB account summary.
+  // IB's reqPnL().realizedPnL can include non-trade events and diverges from fill-level data.
+  const executedOrders = useMemo(() => orders?.executed_orders ?? [], [orders]);
+  const todayRealizedPnl = useMemo(
+    () => computeRealizedPnlFromFills(executedOrders),
+    [executedOrders],
+  );
 
   // Sync prices + portfolio into ticker-detail context (refs, no re-renders)
   const { setPrices: setTickerPrices, setPortfolio: setTickerPortfolio, setOrders: setTickerOrders } = useTickerDetail();
@@ -217,7 +234,7 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
         <div className="content">
           {activeSection === "dashboard" ? <ChatPanel activeSection={activeSection} /> : null}
 
-          {activeSection !== "dashboard" ? <MetricCards portfolio={portfolio} prices={prices} realizedPnl={blotterData?.summary.realized_pnl ?? 0} section={activeSection} /> : null}
+          {activeSection !== "dashboard" ? <MetricCards portfolio={portfolio} prices={prices} realizedPnl={todayRealizedPnl} executedOrders={executedOrders} section={activeSection} /> : null}
 
           {activeSection !== "dashboard" ? (
             <WorkspaceSections section={activeSection} portfolio={portfolio} orders={orders} prices={prices} />
@@ -225,7 +242,7 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
         </div>
       </main>
 
-      <TickerDetailModal />
+      <TickerDetailModal theme={resolvedTheme} />
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
   );
