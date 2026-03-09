@@ -1,9 +1,10 @@
 # Status & Decision Log
 
 ## Last Updated
-2026-03-08T12:00:00-07:00
+2026-03-08T20:30:00-07:00
 
 ## Recent Commits
+- 2026-03-08 20:30:00 -0700 — **feat: Scenario stress test — interactive `stress-test` command with β-SPX/oil/VIX crash-beta pricing engine, BSM IV expansion, expandable ▶ detail rows per position, HTML template**
 - 2026-03-08 12:00:00 -0700 — **feat: CRI Scan launchd service — automated every 30 min (4:05 AM–8 PM ET, Mon-Fri trading days), stale-while-revalidate API route (1 min TTL)**
 - 2026-03-07 21:33:00 -0700 — **feat: Add IBC Gateway setup script — automated IB Gateway management via launchd (Mon-Fri auto-start, daily restart, 2FA handling, dialog suppression)**
 - 2026-03-07 16:00:00 -0800 — **fix: Enforce data source priority (IB → UW → Yahoo) in all scanners. Add UW OHLC fallback to CRI, VCG, GARCH, LEAP scanners. Yahoo is LAST RESORT only.**
@@ -368,6 +369,8 @@ Click any ticker across all 6 table sections → 720px modal with:
 | `garch_convergence.py` | **⭐ GARCH Convergence scanner (parallel, ~3s for 23 tickers)** |
 | `portfolio_report.py` | **⭐ Self-contained portfolio HTML report (IB + DP flow + thesis check)** |
 | `context_constructor.py` | **⭐ Persistent memory: Constructor (auto-load) + Evaluator (save facts/episodes)** |
+| `scenario_analysis.py` | **⭐ Stress test pricing engine — β-SPX + oil + VIX crash-beta + BSM IV expansion** |
+| `scenario_report.py` | **⭐ Stress test HTML report — reference implementation with expandable ▶ detail rows** |
 | `setup_ibc.sh` | **⭐ IBC Gateway service manager (install/uninstall/status/logs/start/stop)** |
 
 ### Skills
@@ -390,7 +393,8 @@ Click any ticker across all 6 table sections → 720px modal with:
 |----------|---------|
 | `trade-specification-template.html` | Full evaluation report |
 | `pnl-template.html` | P&L reconciliation report |
-| `portfolio-template.html` | **Portfolio report with today-highlighted sparklines (NEW)** |
+| `portfolio-template.html` | **Portfolio report with today-highlighted sparklines** |
+| `stress-test-template.html` | **⭐ Scenario stress test with expandable ▶ detail rows per position (NEW)** |
 
 ### Persistent Memory
 | Directory | Count | Purpose |
@@ -459,6 +463,9 @@ Click any ticker across all 6 table sections → 720px modal with:
 - [x] **Context engineering: `context_constructor.py` — Constructor + Evaluator pipeline, auto-loads at startup**
 - [x] **Seeded 7 persistent facts from evaluation history + 1 episodic summary**
 - [x] **IBC Gateway setup script — automated IB Gateway management via launchd**
+- [x] **Scenario stress test: `stress-test` command, pricing engine, expandable HTML report with per-position narratives**
+- [x] **Stress test template: `.pi/skills/html-report/stress-test-template.html` with ▶ detail rows**
+- [x] **SKILL.md Generation Checklist: Stress Test Reports (14 steps)**
 - [ ] Execute MSFT LEAP call trade (pending confirmation)
 - [ ] Close undefined risk positions before Friday expiry
 - [ ] Review PLTR for profit-taking (23 DTE, +175%)

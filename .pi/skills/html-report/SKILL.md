@@ -849,6 +849,105 @@ See: `reports/cri-scan-2026-03-06.html`
 
 ---
 
+## Stress Test Report Template ⭐
+
+**For the `stress-test` command, ALWAYS use the dedicated stress test template.**
+
+**Template:** `.pi/skills/html-report/stress-test-template.html`
+**Analysis Engine:** `scripts/scenario_analysis.py`
+**Report Generator:** `scripts/scenario_report.py` (reference implementation)
+**Output:** `reports/stress-test-{date}.html`
+
+### When to Use
+
+- `stress-test` command (interactive — prompts user for scenario, then generates)
+- Any request for portfolio stress testing, scenario analysis, "what if" modeling
+- Market crash simulations, sector shock analysis
+
+### How It Works
+
+**Two-phase interaction:**
+1. Agent asks: "What is the change in the overall market?"
+2. User describes scenario (e.g., "Oil up 25%, VIX at 40, SPX down 3%")
+3. Agent parses scenario → updates `scenario_analysis.py` parameters → runs model → generates HTML
+
+**The model (`scenario_analysis.py`) computes:**
+- Per-ticker stock moves via: `β_SPX × ΔSPX + OilSens × ΔOil + VIX_crash_beta`
+- Options repricing via Black-Scholes with IV expansion proportional to VIX change
+- Three scenarios: Bear (amplified), Base (as described), Bull (dampened)
+
+### 10 Required Sections
+
+Every stress test report MUST include:
+
+| # | Section | Description |
+|---|---------|-------------|
+| 1 | **Header** | Title, scenario description, timestamp |
+| 2 | **Scenario Assumptions** | Callout with bear/base/bull definitions + model description |
+| 3 | **Summary Metrics** (6) | Net Liq, Bear P&L, Base P&L, Bull P&L, VIX shock, Position count |
+| 4 | **Winners/Losers** | Side-by-side callouts: 5 biggest losers + 5 biggest winners |
+| 5 | **Natural Hedges** | Analysis of which positions offset losses |
+| 6 | **Full Position Matrix** | Table with expandable ▶ detail rows per position |
+| 7 | **Factor Attribution** | 3-column grid: Bear/Base/Bull breakdown by SPX/Oil/VIX/Vega |
+| 8 | **P&L Waterfall** | Visual bar chart sorted by impact |
+| 9 | **Key Takeaways** | Numbered action items |
+| 10 | **Methodology** | Model description, limitations |
+
+### Expandable Detail Rows (▶ Chevron)
+
+**This is the key differentiator.** Every position row has a ▶ chevron that expands to show:
+
+```html
+<tr class="detail-row" id="detail-{N}" style="display:none;">
+  <td colspan="16">
+    <div style="padding:20px 24px; background:var(--bg-hover);">
+      <!-- 4-panel grid -->
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+        <div>🛢️ Oil Impact (sensitivity coefficient)</div>
+        <div>📉 S&P 500 Beta (beta × SPX move)</div>
+        <div>📊 VIX Stress (crash-beta multiplier)</div>
+        <div>📋 Position Structure & P&L (options mechanics)</div>
+      </div>
+      <!-- Net Assessment bar -->
+      <div>Net Assessment: [BENEFITS/HURT/NEUTRAL] + explanation</div>
+      <!-- Price scenarios -->
+      <div>Bear/Base/Bull prices + current + IV data if options</div>
+    </div>
+  </td>
+</tr>
+```
+
+The narrative MUST explain:
+- **WHY** oil/commodity prices help or hurt this specific name
+- **HOW** SPX beta translates to this ticker's expected move
+- **WHAT** VIX stress multiplier does (crash-beta, momentum unwind, safe haven)
+- **HOW** the options structure converts the stock move to P&L (vega vs delta, spread caps, assignment risk)
+
+### Modeling Rules (HARD CONSTRAINTS)
+
+| Rule | Why |
+|------|-----|
+| Single per-ticker IV | Never estimate IV per-leg (causes impossible spread states) |
+| Spread P&L clamped | Debit spread: `[-debit, +max_width]`. Credit spread: `[-max_width, +credit]` |
+| Long option P&L floored | Can't lose more than premium paid |
+| LEAP IV dampening | >180 DTE: 50% of VIX expansion. 60-180: 75%. <60: 100% |
+| VIX crash-beta threshold | Only activates when scenario VIX > 30 |
+| Oil sensitivity is additive | Added on top of beta, not multiplicative |
+
+### Template Variables
+
+| Variable | Description |
+|----------|-------------|
+| `{{TITLE}}` | Report title with scenario summary |
+| `{{BODY}}` | Full report body (all 10 sections) |
+
+### Reference Implementation
+
+See: `reports/scenario-stress-test-2026-03-08.html`
+See: `scripts/scenario_report.py` (full report generation with narratives)
+
+---
+
 ## Generation Checklist
 
 ### General Reports
@@ -950,3 +1049,20 @@ See: `reports/cri-scan-2026-03-06.html`
 6. [ ] Verify no unresolved `{{PLACEHOLDER}}` variables remain in output HTML
 7. [ ] Report auto-opens in browser (unless `--no-open`)
 8. [ ] Output saved to `reports/cri-scan-{date}.html`
+
+### Stress Test Reports
+
+1. [ ] Read template from `.pi/skills/html-report/stress-test-template.html`
+2. [ ] Parse user's scenario into quantitative parameters (SPX move, VIX, sector shocks)
+3. [ ] Update `scripts/scenario_analysis.py` with scenario-specific parameters and sensitivities
+4. [ ] Run `python3 scripts/scenario_analysis.py` to generate `/tmp/scenario_analysis.json`
+5. [ ] Generate per-position narratives explaining oil/SPX/VIX/structure impact
+6. [ ] Build HTML body with all 10 required sections
+7. [ ] Verify all defined-risk P&L is within `[-debit, +max_width]` bounds
+8. [ ] Verify expandable ▶ chevron rows work for every position (toggle on click)
+9. [ ] Verify 4-panel detail grid present (Oil, SPX, VIX, Structure) per position
+10. [ ] Verify Bear/Base/Bull totals sum correctly across all positions
+11. [ ] Replace `{{TITLE}}` and `{{BODY}}` in template
+12. [ ] Save to `reports/stress-test-{date}.html`
+13. [ ] Open in browser
+14. [ ] Reference implementation: `reports/scenario-stress-test-2026-03-08.html`

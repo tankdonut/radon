@@ -67,6 +67,13 @@ An evaluation is complete when:
 - Flag positions below -50% stop
 - Flag positions approaching expiry (<21 DTE)
 
+### Scenario Stress Testing
+- Interactive `stress-test` command: ask user for scenario, model P&L, generate HTML report
+- Pricing engine: β-SPX + oil sensitivity + VIX crash-beta + Black-Scholes IV expansion
+- Defined-risk P&L hard-capped at max loss (net debit)
+- Per-position expandable narratives explaining why each asset is helped/hurt
+- Template: `.pi/skills/html-report/stress-test-template.html`
+
 ## Data Sources (Priority Order)
 1. **Interactive Brokers** — Real-time quotes, positions, executions
 2. **Unusual Whales** — Dark pool flow, options activity, alerts, analyst ratings

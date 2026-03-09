@@ -123,6 +123,7 @@ When market is closed, free trade analysis explicitly shows it's using closing p
 | `risk-reversal [TICKER]` | **Run `python3 scripts/risk_reversal.py [TICKER]`** — IV skew risk reversal analysis + HTML report |
 | `vcg` | **VCG scan — call `vcg_scan` tool (registered Pi tool).** Do NOT re-read strategy docs. |
 | `strategies` | List available trading strategies (reads `data/strategies.json`) |
+| `stress-test` | **Interactive scenario stress test — asks for market scenario, runs portfolio P&L analysis, generates HTML report** |
 
 ### ⚠️ Strategy Registry Sync (MANDATORY)
 
@@ -151,6 +152,81 @@ When adding, modifying, or removing a strategy in `docs/strategies.md`, **ALWAYS
 **Optional:** `"manager_override": true` (only for undefined-risk strategies).
 
 **After any change:** `python3 -m json.tool data/strategies.json`
+
+### Stress Test Command Details
+
+**Interactive, two-step workflow:**
+
+**Step 1 — Prompt:** When user types `stress-test`, respond with:
+```
+What is the change in the overall market?
+
+Describe the scenario you want to stress test. Examples:
+• "Oil up 25%, VIX at 40, S&P down 3%"
+• "China invades Taiwan, semiconductors down 30%, VIX at 60"
+• "Fed cuts 50bps, bonds rally 5%, growth stocks up 10%"
+• "Crypto crashes 40%, risk-off, VIX at 35"
+```
+
+**Step 2 — Analysis:** After the user describes their scenario, execute:
+
+1. **Parse the scenario** into quantitative parameters:
+   - SPX move (bear/base/bull variants)
+   - VIX level (bear/base/bull variants)
+   - Sector-specific shocks (oil, crypto, semis, etc.)
+   - Any other named factors
+
+2. **Load current portfolio** from `data/portfolio.json`
+
+3. **Run the scenario analysis** using `scripts/scenario_analysis.py` as the pricing engine:
+   - Per-ticker stock moves via: β-SPX + sector sensitivity + VIX crash-beta
+   - Options repricing via Black-Scholes with IV expansion proportional to VIX
+   - Defined-risk P&L hard-capped at max loss (net debit)
+   - Three scenarios: Bear (worst), Base (as described), Bull (mild version)
+
+4. **Generate per-position narratives** explaining WHY each asset is helped/hurt:
+   - Oil/commodity sensitivity rationale
+   - SPX beta explanation
+   - VIX stress multiplier reasoning
+   - Options structure P&L mechanics (vega vs delta, spread bounds, etc.)
+
+5. **Generate HTML report** using the stress-test template:
+   - **Template:** `.pi/skills/html-report/stress-test-template.html`
+   - **Output:** `reports/stress-test-{date}.html`
+   - **Auto-opens in browser**
+
+6. **Report sections (all MANDATORY):**
+   - Header with scenario description
+   - Scenario assumptions callout (bear/base/bull definitions)
+   - 6 summary metric cards (Net Liq, Bear/Base/Bull P&L, VIX, Positions)
+   - Winners/Losers callouts
+   - Natural hedges analysis
+   - **Full position matrix table with expandable ▶ detail rows** (click chevron to see per-position narrative with oil, SPX, VIX, and structure analysis)
+   - Factor attribution (3 columns: bear/base/bull)
+   - P&L waterfall chart
+   - Key takeaways & action items
+   - Methodology panel
+
+**Scenario Analysis Engine:**
+- Script: `scripts/scenario_analysis.py` — the pricing/modeling backend
+- Script: `scripts/scenario_report.py` — reads analysis JSON + generates HTML (reference implementation)
+- Both scripts should be UPDATED for each new scenario (new parameters, new narratives)
+- The narratives in `scenario_report.py` are a REFERENCE — generate fresh narratives tailored to the user's specific scenario each time
+
+**Key modeling rules:**
+- Use `BASELINE_IV` dict for per-ticker IV (never estimate IV per-leg independently)
+- Defined-risk spreads: P&L clamped to `[-net_debit, +max_width]`
+- Long options: P&L floored at `-premium_paid`
+- LEAP IV expansion dampened 50%, medium-dated 75%, short-dated 100%
+- VIX crash-beta only activates when scenario VIX > 30
+
+**Trigger phrases (all route to stress-test):**
+- `stress-test`
+- `stress test`
+- `scenario analysis`
+- `what happens if the market...`
+- `run a stress test`
+- `portfolio stress test`
 
 ### Evaluate Command Details
 
@@ -1044,6 +1120,8 @@ python3 scripts/garch_convergence.py --preset all --no-open # Don't open browser
 | `scripts/portfolio_report.py` | Generate HTML portfolio report and open in browser |
 | `scripts/free_trade_analyzer.py` | Analyze positions for free trade opportunities |
 | `scripts/fetch_menthorq_cta.py` | **MenthorQ CTA positioning — browser scrape + Vision extraction, daily cache** |
+| `scripts/scenario_analysis.py` | **⭐ Scenario stress test pricing engine — β-SPX + oil + VIX crash-beta + BSM IV expansion** |
+| `scripts/scenario_report.py` | **⭐ Stress test HTML report generator — reference implementation with expandable detail rows** |
 | `scripts/context_constructor.py` | **⭐ Context pipeline: load persistent memory at startup, save facts/episodes** |
 
 ## ⚠️ Order Execution (CRITICAL)

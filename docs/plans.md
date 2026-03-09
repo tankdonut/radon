@@ -327,3 +327,21 @@ When position closes:
 2. Calculate realized P&L with commissions
 3. Update trade_log.json with close data
 4. Generate P&L report if significant
+
+### Scenario Stress Testing
+Interactive `stress-test` command for ad-hoc "what if" analysis:
+1. Agent prompts: *"What is the change in the overall market?"*
+2. User describes scenario (e.g., "Oil up 25%, VIX at 40, SPX down 3%")
+3. Agent parses into quantitative parameters (SPX move, VIX level, sector shocks)
+4. Updates `scripts/scenario_analysis.py` with scenario parameters
+5. Runs pricing engine: β-SPX + oil sensitivity + VIX crash-beta + BSM IV expansion
+6. Generates per-position narratives (oil, beta, VIX, options structure)
+7. Produces HTML report from `stress-test-template.html` with expandable ▶ detail rows
+8. Opens report in browser
+
+**Key constraints:**
+- Single per-ticker IV (never per-leg to avoid impossible spread states)
+- Defined-risk P&L hard-capped at `[-net_debit, +max_width]`
+- LEAP IV expansion dampened 50% (term structure flattening in stress)
+- VIX crash-beta activates only when scenario VIX > 30
+- Three scenarios always generated: Bear (amplified), Base (as described), Bull (dampened)
