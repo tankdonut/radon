@@ -61,6 +61,17 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
   // Always fetch orders so fills are available for the Realized P&L card on all pages
   const { data: orders, syncing: ordersSyncing, error: ordersError, lastSync: ordersLastSync, syncNow: ordersSyncNow, updateData: updateOrdersData } = useOrders(true);
 
+  // Trigger a fresh IB sync every time the user navigates TO the orders page.
+  // place/modify/cancel all sync orders.json immediately after the action, so
+  // this primarily catches IB-side changes (partial fills, status updates, etc.)
+  // that happened while the user was on another page.
+  useEffect(() => {
+    if (isOrdersPage) {
+      ordersSyncNow();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOrdersPage]);
+
   const orderSymbols = useMemo(
     () => (orders?.open_orders ?? []).map((o) => o.contract.symbol),
     [orders],
