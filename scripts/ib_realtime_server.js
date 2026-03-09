@@ -9,6 +9,11 @@
 import process from "node:process";
 import { WebSocketServer } from "ws";
 import IB from "ib";
+import {
+  createPriceData,
+  updatePriceFromTickPrice,
+  updatePriceFromTickSize,
+} from "./ib_tick_handler.js";
 
 const DEFAULT_WS_PORT = 8765;
 const DEFAULT_IB_HOST = "127.0.0.1";
@@ -103,114 +108,8 @@ function normalizeIndexes(raw) {
     .filter(Boolean);
 }
 
-function normalizeNumber(value) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    return null;
-  }
-  return value;
-}
-
 function nowIso() {
   return new Date().toISOString();
-}
-
-function createPriceData(symbol) {
-  return {
-    symbol,
-    last: null,
-    lastIsCalculated: false,
-    bid: null,
-    ask: null,
-    bidSize: null,
-    askSize: null,
-    volume: null,
-    high: null,
-    low: null,
-    open: null,
-    close: null,
-    delta: null,
-    gamma: null,
-    theta: null,
-    vega: null,
-    impliedVol: null,
-    undPrice: null,
-    timestamp: nowIso(),
-  };
-}
-
-function updateDerivedLast(data) {
-  if (data.last == null && data.bid != null && data.ask != null) {
-    const midpoint = (data.bid + data.ask) / 2;
-    data.last = Number.isFinite(midpoint) ? Number(midpoint.toFixed(4)) : null;
-    data.lastIsCalculated = true;
-  }
-  // Cash indexes (e.g. VIX, VVIX) report their value via CLOSE tick, not LAST.
-  // If last is still null after bid/ask check, use close as the live value.
-  if (data.last == null && data.close != null) {
-    data.last = data.close;
-    data.lastIsCalculated = true;
-  }
-}
-
-function updatePriceFromTickPrice(data, tickType, value) {
-  const { TICK_TYPE } = IB;
-  switch (tickType) {
-    case TICK_TYPE.BID:
-      data.bid = normalizeNumber(value);
-      data.lastIsCalculated = false;
-      break;
-    case TICK_TYPE.ASK:
-      data.ask = normalizeNumber(value);
-      data.lastIsCalculated = false;
-      break;
-    case TICK_TYPE.LAST:
-      data.last = normalizeNumber(value);
-      data.lastIsCalculated = false;
-      break;
-    case TICK_TYPE.HIGH:
-      data.high = normalizeNumber(value);
-      break;
-    case TICK_TYPE.LOW:
-      data.low = normalizeNumber(value);
-      break;
-    case TICK_TYPE.OPEN:
-      data.open = normalizeNumber(value);
-      break;
-    case TICK_TYPE.CLOSE:
-      data.close = normalizeNumber(value);
-      break;
-    case TICK_TYPE.VOLUME:
-      data.volume = normalizeNumber(value);
-      break;
-    default:
-      break;
-  }
-
-  if (data.last == null) {
-    updateDerivedLast(data);
-  }
-  data.timestamp = nowIso();
-}
-
-function updatePriceFromTickSize(data, sizeType, value) {
-  const { TICK_TYPE } = IB;
-  switch (sizeType) {
-    case TICK_TYPE.BID_SIZE:
-      data.bidSize = normalizeNumber(value);
-      break;
-    case TICK_TYPE.ASK_SIZE:
-      data.askSize = normalizeNumber(value);
-      break;
-    case TICK_TYPE.VOLUME:
-      data.volume = normalizeNumber(value);
-      break;
-    case TICK_TYPE.LAST_SIZE:
-      break;
-    default:
-      break;
-  }
-
-  data.timestamp = nowIso();
 }
 
 function parseActionMessage(raw) {

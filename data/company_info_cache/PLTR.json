@@ -1,7 +1,7 @@
 {
   "ticker": "PLTR",
   "profile_expires": null,
-  "stats_expires": "2026-03-10T14:08:24.123Z",
+  "stats_expires": "2026-03-10T16:46:08.142Z",
   "uw_info": {
     "symbol": "PLTR",
     "logo": "https://storage.googleapis.com/uwassets/logos/PLTR.png",
@@ -24,17 +24,17 @@
     "has_earnings_history": true
   },
   "stock_state": {
-    "close": "154.795",
+    "close": "155.07",
     "high": "158.44",
-    "low": "153.87",
+    "low": "153.64",
     "open": "155.69",
-    "volume": 8936269,
+    "volume": 24653977,
     "market_time": "regular",
-    "tape_time": "2026-03-09T14:08:22Z",
-    "total_volume": 10680082,
+    "tape_time": "2026-03-09T16:46:07Z",
+    "total_volume": 26397790,
     "prev_close": "155.69"
   },
   "exa_profile": {},
   "exa_stats": {},
-  "fetched_at": "2026-03-09T14:08:24.123Z"
+  "fetched_at": "2026-03-09T16:46:08.142Z"
 }

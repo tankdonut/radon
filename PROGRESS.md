@@ -1,5 +1,54 @@
 # PROGRESS
 
+## Session: 2026-03-09
+
+### Changes Made
+
+#### 1. Bug Fix Workflow — TDD + E2E mandatory
+**Files**: `CLAUDE.md`, `.pi/AGENTS.md`, `~/.claude/CLAUDE.md`
+
+Established permanent rule: all bug fixes require red/green TDD (failing test first, then fix, then green). UI bugs additionally require a Playwright E2E test for confirmation. Updated all three instruction files.
+
+#### 2. VIX/VVIX live badge + timestamp on /regime
+**Files**: `web/components/RegimePanel.tsx`, `web/app/globals.css`, `web/e2e/regime-vix-live-badge.spec.ts`
+
+- Added `vixLastTs` / `vvixLastTs` state tracking last live WS tick timestamp (updated via `useEffect` on `liveVix`/`liveVvix`)
+- New `.regime-strip-ts` element in VIX and VVIX strip cells: shows `HH:MM:SS` when live, `---` when no data
+- Added `data-testid="strip-vix"` and `data-testid="strip-vvix"` for reliable E2E targeting
+- 6 Playwright E2E tests (badge presence, timestamp element, `---` default) — all green
+
+#### 3. Portfolio auto-sync — IB as source of truth
+**Files**: `web/app/api/portfolio/route.ts`, `web/tests/portfolio-auto-sync.test.ts`
+
+`GET /api/portfolio` now triggers background `ib_sync.py` when `portfolio.json` mtime >60s. Stale-while-revalidate: always serves immediately, syncs in background. Concurrency-guarded with module-level flag. 4 tests.
+
+#### 4. Realized P&L — date filter bug fix
+**Files**: `web/lib/realized-pnl.ts`, `web/tests/realized-pnl-date-filter.test.ts`
+
+**Root cause**: `ib_insync.fills()` is session-scoped across calendar days. `orders.json` held prior-day fills (e.g. ILF closure at -$6,835) and `computeRealizedPnlFromFills()` summed all of them without date filtering.
+
+Fix: added `todayET()` + `fillDateET()` (ET-aware, DST-correct) and filter fills to today before summing. 6 new tests including DST boundary and UTC/ET midnight edge cases.
+
+#### 5. Day Move — mid price fallback
+**Files**: `web/lib/dayMoveBreakdown.ts` (NEW), `web/components/MetricCards.tsx`
+
+Extracted `computeDayMoveBreakdown` from MetricCards into a testable lib module. Added `resolveLastOrMid()`: uses `last` if positive, falls back to `(bid+ask)/2` for illiquid options/pre-market. Positions with no `last` but valid bid/ask are now included; breakdown shows `(MID)` suffix for transparency. 15 tests.
+
+#### 6. IB delayed tick types — VIX/VVIX null data fix
+**Files**: `scripts/ib_tick_handler.js` (NEW), `scripts/ib_realtime_server.js`, `web/tests/ib-delayed-ticks.test.ts`
+
+**Root cause**: `reqMarketDataType(4)` (Delayed-Frozen) causes IB to send delayed tick types (66–76) for instruments without a real-time subscription (VIX, VVIX require separate CBOE index subscription). The original switch only handled live tick types (1–14) — delayed ticks hit `default: break` and all fields stayed null forever.
+
+Fix: extracted tick handling into `scripts/ib_tick_handler.js` (pure, testable). Added all 8 delayed tick cases: `DELAYED_BID(66)`, `DELAYED_ASK(67)`, `DELAYED_LAST(68)`, `DELAYED_HIGH(72)`, `DELAYED_LOW(73)`, `DELAYED_VOLUME(74)`, `DELAYED_CLOSE(75)`, `DELAYED_OPEN(76)`. `updateDerivedLast()` promotes `close → last` so VIX/VVIX populate automatically from DELAYED_CLOSE. `ib_realtime_server.js` imports from handler — no logic duplication. 16 tests.
+
+### Verified
+- All new tests green: 6 (VIX badge E2E) + 4 (portfolio sync) + 6 (realized PnL) + 15 (day move mid) + 16 (delayed ticks) = 47 tests
+- `tsc --noEmit` — no new type errors
+- VIX/VVIX: confirmed delayed tick type IDs via runtime (`DELAYED_CLOSE=75`, `DELAYED_OPEN=76`, `DELAYED_VOLUME=74`)
+- Restart `ib_realtime_server.js` to activate delayed tick fix
+
+---
+
 ## Session: 2026-03-07
 
 ### Changes Made

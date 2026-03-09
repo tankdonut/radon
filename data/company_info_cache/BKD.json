@@ -24,14 +24,14 @@
     "has_earnings_history": true
   },
   "stock_state": {
-    "close": "14.115",
+    "close": "14.095",
     "high": "14.835",
     "low": "13.81",
     "open": "14.75",
-    "volume": 2676652,
+    "volume": 2790392,
     "market_time": "regular",
-    "tape_time": "2026-03-09T16:20:39Z",
-    "total_volume": 2678988,
+    "tape_time": "2026-03-09T16:37:44Z",
+    "total_volume": 2792728,
     "prev_close": "14.4"
   },
   "exa_profile": {
