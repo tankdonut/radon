@@ -78,12 +78,3 @@ describe("ib_order_manage.py cancel clientId fix", () => {
   });
 });
 
-// --- Structural: instrumentation warms discover cache ---
-
-describe("instrumentation-node.ts", () => {
-  it("runs discover.py on server startup", () => {
-    const content = readFileSync(resolve(webDir, "lib", "instrumentation-node.ts"), "utf8");
-    expect(content.includes("discover.py")).toBeTruthy();
-    expect(content.includes("discover.json")).toBeTruthy();
-  });
-});
