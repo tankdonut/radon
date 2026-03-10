@@ -172,7 +172,7 @@ When `market_open === false`, the component **must**:
 | `scripts/cri_scan.py` | Crash Risk Index — CTA deleveraging detection |
 | `scripts/fetch_menthorq_cta.py` | MenthorQ CTA positioning (S3 image download + Vision extraction) |
 | `scripts/fetch_menthorq_dashboard.py` | MenthorQ dashboard charts (S3 download → screenshot fallback + Vision) |
-| `scripts/setup_ibc.sh` | IBC Gateway service manager (install/uninstall/status/logs/start/stop) |
+| `scripts/setup_ibc.sh` | **Legacy** — superseded by `local.ibc-gateway` global service (see IB Gateway & IBC section) |
 | `scripts/setup_cri_service.sh` | CRI Scan launchd service (every 30 min, 4:05 AM–8 PM ET, Mon-Fri trading days) |
 | `scripts/run_cri_scan.sh` | Holiday-aware CRI scan wrapper for launchd |
 | `scripts/clients/inspect_dashboard.py` | MenthorQ DOM inspector — finds chart containers, S3 image URLs per command |
@@ -409,20 +409,35 @@ Full spec: `docs/unusual_whales_api.md` | `docs/unusual_whales_api_spec.yaml`
 
 ## IB Gateway & IBC
 
-IB Gateway is managed by IBC (Interactive Brokers Controller) v3.23.0, vendored at `vendor/ibc/`.
+IB Gateway is managed by a **machine-global secure IBC service** (`local.ibc-gateway`), shared with [market-data-warehouse](https://github.com/joemccann/market-data-warehouse). IBC install lives at `~/ibc-install/`, config and wrappers at `~/ibc/`.
 
-**Setup:** `./scripts/setup_ibc.sh {install|uninstall|status|logs|start|stop}`
+**Credentials:** Stored in macOS Keychain (not on disk). The runner reads credentials at launch, writes a temporary `0600` runtime config, and removes it after IBC exits.
+
+**Service commands:**
+
+| Command | Action |
+|---------|--------|
+| `~/ibc/bin/start-secure-ibc-service.sh` | Start Gateway via launchd |
+| `~/ibc/bin/stop-secure-ibc-service.sh` | Stop Gateway |
+| `~/ibc/bin/restart-secure-ibc-service.sh` | Restart Gateway |
+| `~/ibc/bin/status-secure-ibc-service.sh` | Check service status |
+| `~/ibc-install/stop.sh` | Clean shutdown (while running) |
+| `~/ibc-install/reconnectdata.sh` | Reconnect market data |
+| `~/ibc-install/reconnectaccount.sh` | Reconnect to IB login server |
+
+**LaunchAgent:** `~/Library/LaunchAgents/local.ibc-gateway.plist`
 
 **Lifecycle (automated via launchd):**
-- **Mon-Fri 00:00** — launchd starts Gateway via IBC, auto-fills credentials, suppresses dialogs
+- **Mon-Fri 00:00** — launchd starts Gateway via IBC, reads Keychain credentials
 - **2FA** — approve once on IBKR Mobile; IBC retries if missed (`TWOFA_TIMEOUT_ACTION=restart`)
 - **11:58 PM daily** — IBC auto-restarts Gateway (reuses auth session, no 2FA needed)
 - **Sunday 07:05** — Cold restart: full shutdown + fresh login (weekly re-auth, 2FA required)
 
-**Key config (`~/ibc/config.ini`):**
+**Key config (`~/ibc/config.secure.ini`):**
 - `ExistingSessionDetectedAction=primary` — Gateway reconnects if bumped by another session
 - `AcceptIncomingConnectionAction=accept` — no popup for API connections
 - `CommandServerPort=7462` — IBC command server for stop/restart
+- No `IbLoginId`/`IbPassword` — credentials are in Keychain only
 
 **Ports:**
 
@@ -433,6 +448,8 @@ IB Gateway is managed by IBC (Interactive Brokers Controller) v3.23.0, vendored 
 | 4001 | IB Gateway Live |
 | 4002 | IB Gateway Paper |
 | 7462 | IBC Command Server (stop/restart Gateway) |
+
+**Legacy:** The old `com.convex-scavenger.ibc-gateway` LaunchAgent and `scripts/setup_ibc.sh` are superseded by the global `local.ibc-gateway` service. The legacy plist was migrated automatically by the market-data-warehouse installer.
 
 IB error `10358` = Reuters Fundamentals subscription inactive → auto-fallback to next source.
 
@@ -451,7 +468,7 @@ IB error `10358` = Reuters Fundamentals subscription inactive → auto-fallback 
 
 ## Startup Checklist
 
-- [ ] IB Gateway running (`./scripts/setup_ibc.sh status`) — if not, approve 2FA on IBKR Mobile
+- [ ] IB Gateway running (`~/ibc/bin/status-secure-ibc-service.sh`) — if not, approve 2FA on IBKR Mobile
 - [ ] IB reconciliation auto-runs (`scripts/ib_reconcile.py`) — check `data/reconciliation.json`
 - [ ] Exit order service auto-runs — checks `PENDING_MANUAL` positions
 - [ ] CRI scan service running (`./scripts/setup_cri_service.sh status`) — 30-min intervals, premarket-close
