@@ -98,7 +98,7 @@ function buildTweetText(description: string, pnl: number, pnlPct: number | null,
     parts.push(`${pSign}${pnlPct.toFixed(2)}%`);
   }
   const pnlStr = parts.join(" ");
-  return `${description} ${pnlStr}\n\nExecuted with Radon`;
+  return `${description} ${pnlStr}\n\nExecuted with Radon\nhttps://github.com/joemccann/radon`;
 }
 
 describe("execOrderDescription", () => {
