@@ -132,7 +132,7 @@ export async function GET(
           width: "100%",
           height: "100%",
           background: OG.bg,
-          fontFamily: "JetBrains Mono",
+          fontFamily: "IBM Plex Mono",
           color: OG.text,
           padding: "20px",
         }}

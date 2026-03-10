@@ -113,7 +113,7 @@ export function lineChartSvg({
                 fill={OG.muted}
                 fontSize={9}
                 textAnchor="end"
-                fontFamily="JetBrains Mono"
+                fontFamily="IBM Plex Mono"
               >
                 {tick.toFixed(2)}
               </text>
@@ -133,7 +133,7 @@ export function lineChartSvg({
             fill={OG.muted}
             fontSize={8}
             textAnchor="middle"
-            fontFamily="JetBrains Mono"
+            fontFamily="IBM Plex Mono"
           >
             {d.label}
           </text>
@@ -238,7 +238,7 @@ export function barChartSvg({
             fill={OG.muted}
             fontSize={8}
             textAnchor="middle"
-            fontFamily="JetBrains Mono"
+            fontFamily="IBM Plex Mono"
             transform={`rotate(-45, ${xScale(d.label) + bandwidth / 2}, ${height - 6})`}
           >
             {d.label}
@@ -257,7 +257,7 @@ export function barChartSvg({
             fill={OG.muted}
             fontSize={9}
             textAnchor="end"
-            fontFamily="JetBrains Mono"
+            fontFamily="IBM Plex Mono"
           >
             {tick >= 1e9
               ? `${(tick / 1e9).toFixed(1)}B`
@@ -340,7 +340,7 @@ export function areaChartSvg({
                 fill={OG.muted}
                 fontSize={9}
                 textAnchor="end"
-                fontFamily="JetBrains Mono"
+                fontFamily="IBM Plex Mono"
               >
                 {tick.toFixed(2)}
               </text>
@@ -359,7 +359,7 @@ export function areaChartSvg({
             fill={OG.muted}
             fontSize={8}
             textAnchor="middle"
-            fontFamily="JetBrains Mono"
+            fontFamily="IBM Plex Mono"
           >
             {d.label}
           </text>
@@ -434,7 +434,7 @@ export function heatmapSvg({
           fill={OG.muted}
           fontSize={8}
           textAnchor="middle"
-          fontFamily="JetBrains Mono"
+          fontFamily="IBM Plex Mono"
         >
           {col}
         </text>
@@ -449,7 +449,7 @@ export function heatmapSvg({
             fill={OG.muted}
             fontSize={8}
             textAnchor="end"
-            fontFamily="JetBrains Mono"
+            fontFamily="IBM Plex Mono"
           >
             {row}
           </text>

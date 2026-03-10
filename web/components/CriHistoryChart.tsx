@@ -127,7 +127,7 @@ export default function CriHistoryChart({ history, criScore }: CriHistoryChartPr
         .attr("y", criY + 3)
         .attr("fill", "#94a3b8")
         .attr("font-size", "9px")
-        .attr("font-family", "JetBrains Mono, monospace")
+        .attr("font-family", "IBM Plex Mono, monospace")
         .text(`CRI ${criScore.toFixed(0)}`);
     }
 
@@ -188,7 +188,7 @@ export default function CriHistoryChart({ history, criScore }: CriHistoryChartPr
           .selectAll(".tick text")
           .attr("fill", "#94a3b8")
           .attr("font-size", "10px")
-          .attr("font-family", "JetBrains Mono, monospace");
+          .attr("font-family", "IBM Plex Mono, monospace");
       });
 
     // Right y-axis (SPY)
@@ -207,7 +207,7 @@ export default function CriHistoryChart({ history, criScore }: CriHistoryChartPr
           .selectAll(".tick text")
           .attr("fill", "#64748b")
           .attr("font-size", "10px")
-          .attr("font-family", "JetBrains Mono, monospace");
+          .attr("font-family", "IBM Plex Mono, monospace");
       });
 
     // X-axis
@@ -230,7 +230,7 @@ export default function CriHistoryChart({ history, criScore }: CriHistoryChartPr
           .selectAll(".tick text")
           .attr("fill", "#94a3b8")
           .attr("font-size", "10px")
-          .attr("font-family", "JetBrains Mono, monospace");
+          .attr("font-family", "IBM Plex Mono, monospace");
       });
 
     // Legend
@@ -253,7 +253,7 @@ export default function CriHistoryChart({ history, criScore }: CriHistoryChartPr
         .attr("y", legendY + 4)
         .attr("fill", "#94a3b8")
         .attr("font-size", "9px")
-        .attr("font-family", "JetBrains Mono, monospace")
+        .attr("font-family", "IBM Plex Mono, monospace")
         .text(item.label);
     });
 
@@ -303,7 +303,7 @@ export default function CriHistoryChart({ history, criScore }: CriHistoryChartPr
             justifyContent: "center",
             height: HEIGHT,
             color: "#94a3b8",
-            fontFamily: "JetBrains Mono, monospace",
+            fontFamily: "IBM Plex Mono, monospace",
             fontSize: 11,
             letterSpacing: "0.05em",
           }}
@@ -333,7 +333,7 @@ export default function CriHistoryChart({ history, criScore }: CriHistoryChartPr
         >
           <div
             style={{
-              fontFamily: "JetBrains Mono, monospace",
+              fontFamily: "IBM Plex Mono, monospace",
               fontSize: 10,
               color: "#94a3b8",
               marginBottom: 4,
@@ -365,7 +365,7 @@ export default function CriHistoryChart({ history, criScore }: CriHistoryChartPr
                 display: "flex",
                 justifyContent: "space-between",
                 gap: 12,
-                fontFamily: "JetBrains Mono, monospace",
+                fontFamily: "IBM Plex Mono, monospace",
                 fontSize: 10,
                 color: "#94a3b8",
                 lineHeight: "1.6",
