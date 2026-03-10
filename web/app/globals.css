@@ -1946,7 +1946,7 @@ tr.leg-row td {
 .ticker-detail-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 
 /* Price bar */
-.price-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 12px 0; border-top: 1px solid var(--border-dim); border-bottom: 1px solid var(--border-dim); margin-bottom: 0; }
+.price-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px 0; border-top: 1px solid var(--border-dim); border-bottom: 1px solid var(--border-dim); margin-bottom: 0; }
 .price-bar-empty { padding: 12px 0; border-top: 1px solid var(--border-dim); border-bottom: 1px solid var(--border-dim); margin-bottom: 0; text-align: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
 .price-bar-item { display: flex; flex-direction: column; gap: 2px; }
 .price-bar-label { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
@@ -2924,6 +2924,11 @@ tr {
   font-family: var(--font-mono);
   font-size: 16px;
   font-weight: 600;
+}
+.fills-total-pct {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.8;
 }
 
 /* ── PnlBreakdownModal ── */

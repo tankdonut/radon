@@ -467,6 +467,7 @@ export default function MetricCards({ portfolio, prices, realizedPnl, executedOr
         open={fillsModalOpen}
         fills={executedOrders}
         totalRealizedPnl={realized}
+        netLiquidation={acct?.net_liquidation}
         onClose={() => setFillsModalOpen(false)}
       />
 

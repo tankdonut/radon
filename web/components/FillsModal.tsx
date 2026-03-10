@@ -6,6 +6,7 @@ type Props = {
   open: boolean;
   fills: ExecutedOrder[];
   totalRealizedPnl: number;
+  netLiquidation?: number;
   onClose: () => void;
 };
 
@@ -26,7 +27,9 @@ const fmtTime = (iso: string) => {
   }
 };
 
-export default function FillsModal({ open, fills, totalRealizedPnl, onClose }: Props) {
+const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+
+export default function FillsModal({ open, fills, totalRealizedPnl, netLiquidation, onClose }: Props) {
   if (!open) return null;
 
   const fillsWithPnl = fills.filter((f) => f.realizedPNL != null);
@@ -93,6 +96,9 @@ export default function FillsModal({ open, fills, totalRealizedPnl, onClose }: P
                 <span className="fills-total-label">REALIZED P&L</span>
                 <span className={`fills-total-value ${totalRealizedPnl >= 0 ? "positive" : "negative"}`}>
                   {fmtPnl(totalRealizedPnl)}
+                  {netLiquidation != null && netLiquidation > 0 && (
+                    <span className="fills-total-pct"> ({fmtPct(totalRealizedPnl / netLiquidation * 100)})</span>
+                  )}
                 </span>
               </div>
             </div>

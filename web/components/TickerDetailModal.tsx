@@ -22,7 +22,7 @@ export function PriceBar({ priceData, label }: { priceData: PriceData | null; la
     return <div className="price-bar price-bar-empty">No real-time data</div>;
   }
 
-  const { bid, ask, last, volume, close } = priceData;
+  const { bid, ask, last, volume, close, high, low } = priceData;
   const mid = bid != null && ask != null ? (bid + ask) / 2 : null;
   const spread = bid != null && ask != null ? ask - bid : null;
   const dayChange = last != null && last > 0 && close != null && close > 0
@@ -59,6 +59,14 @@ export function PriceBar({ priceData, label }: { priceData: PriceData | null; la
       <div className="price-bar-item">
         <span className="price-bar-label">VOLUME</span>
         <span className="price-bar-value">{volume != null ? volume.toLocaleString() : "---"}</span>
+      </div>
+      <div className="price-bar-item">
+        <span className="price-bar-label">HIGH</span>
+        <span className="price-bar-value">{high != null ? fmtPrice(high) : "---"}</span>
+      </div>
+      <div className="price-bar-item">
+        <span className="price-bar-label">LOW</span>
+        <span className="price-bar-value">{low != null ? fmtPrice(low) : "---"}</span>
       </div>
       <div className="price-bar-item">
         <span className="price-bar-label">DAY</span>
@@ -195,7 +203,7 @@ export default function TickerDetailModal({ theme = "dark" }: { theme?: "dark" |
         {/* Tab content */}
         <div className="ticker-tab-content">
           {resolvedTab === "company" && (
-            <CompanyTab ticker={activeTicker} active={resolvedTab === "company"} />
+            <CompanyTab ticker={activeTicker} active={resolvedTab === "company"} priceData={prices[activeTicker] ?? null} />
           )}
           {resolvedTab === "position" && position && (
             <PositionTab position={position} prices={prices} />
