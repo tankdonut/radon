@@ -1,18 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 /**
  * Inline hover tooltip — renders a small "?" circle that, on hover,
- * shows a 260px-wide explanation box above the trigger.
+ * shows a 260px-wide explanation box. Uses position:fixed so the popup
+ * escapes parent overflow:hidden/auto containers. Flips below the
+ * trigger when there isn't enough viewport space above.
  */
 export default function InfoTooltip({ text }: { text: string }) {
-  const [visible, setVisible] = useState(false);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  function show() {
+    const el = ref.current;
+    if (!el) return;
+    setRect(el.getBoundingClientRect());
+  }
+
+  function hide() {
+    setRect(null);
+  }
+
+  // Determine whether to flip below: if trigger is within 120px of viewport top
+  const flipBelow = rect ? rect.top < 120 : false;
+
   return (
     <span
-      style={{ position: "relative", display: "inline-flex", alignItems: "center" }}
-      onMouseEnter={() => setVisible(true)}
-      onMouseLeave={() => setVisible(false)}
+      ref={ref}
+      style={{ display: "inline-flex", alignItems: "center" }}
+      onMouseEnter={show}
+      onMouseLeave={hide}
     >
       <span
         style={{
@@ -32,13 +50,14 @@ export default function InfoTooltip({ text }: { text: string }) {
       >
         ?
       </span>
-      {visible && (
+      {rect && (
         <span
           style={{
-            position: "absolute",
-            bottom: "calc(100% + 6px)",
-            left: "50%",
-            transform: "translateX(-50%)",
+            position: "fixed",
+            ...(flipBelow
+              ? { top: rect.bottom + 6 }
+              : { top: rect.top - 6, transform: "translateY(-100%)" }),
+            left: Math.max(8, Math.min(rect.left + rect.width / 2 - 130, typeof window !== "undefined" ? window.innerWidth - 268 : 1200)),
             background: "#111",
             border: "1px solid var(--border-focus)",
             padding: "8px 10px",
@@ -47,7 +66,7 @@ export default function InfoTooltip({ text }: { text: string }) {
             fontFamily: "var(--font-mono)",
             color: "var(--text-primary)",
             lineHeight: 1.5,
-            zIndex: 50,
+            zIndex: 9999,
             pointerEvents: "none",
             whiteSpace: "normal",
             fontWeight: 400,
