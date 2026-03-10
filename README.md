@@ -107,7 +107,17 @@ npm install
 npm run dev        # Starts Next.js + IB WebSocket server
 ```
 
-Visit `http://localhost:3000`. Sections: Dashboard, Flow Analysis, Portfolio, Orders, Scanner, Discover, Journal, Regime, CTA.
+Visit `http://localhost:3000`.
+
+1. Dashboard
+2. Flow Analysis
+3. Portfolio
+4. Orders
+5. Scanner
+6. Discover
+7. Journal
+8. Regime
+9. CTA
 
 **Key features:**
 - Real-time price streaming via IB WebSocket with live greeks (delta, gamma, theta, vega)
@@ -217,7 +227,13 @@ All unit tests use mocked API calls — no live IB or UW connections required.
 | Monitor Daemon | Pluggable | Fill monitoring, exit order placement |
 | Data Refresh | Configurable | Portfolio + orders staleness refresh |
 
-Setup: `./scripts/setup_ibc.sh install`, `./scripts/setup_cri_service.sh install`, etc.
+Setup:
+
+1. `./scripts/setup_ibc.sh install`
+2. `./scripts/setup_cri_service.sh install`
+3. `./scripts/setup_monitor_daemon.sh install`
+4. `./scripts/setup_data_refresh_service.sh install`
+5. `./scripts/setup_exit_order_service.sh install`
 
 ## Glossary
 
