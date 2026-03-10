@@ -68,91 +68,94 @@ export async function GET(request: Request) {
             color: OG.text,
           }}
         >
-          {/* Main content area — centered */}
+          {/* Main content area — fills the space */}
           <div
             style={{
               display: "flex",
               flexDirection: "column",
               flexGrow: 1,
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "0 64px",
+              padding: "48px 64px 40px 64px",
             }}
           >
-            {/* Contract description */}
+            {/* Top: Contract description — left-aligned */}
             <div
               style={{
                 display: "flex",
                 fontSize: "24px",
                 fontWeight: 400,
                 color: OG.muted,
-                marginBottom: "20px",
-                textAlign: "center",
               }}
             >
               {description}
             </div>
 
-            {/* Hero P&L — dollar and/or percent */}
+            {/* Center: Hero P&L — grows to fill vertical space */}
             <div
               style={{
                 display: "flex",
-                flexDirection: "row",
-                alignItems: "baseline",
+                flexDirection: "column",
+                alignItems: "center",
                 justifyContent: "center",
-                marginBottom: "12px",
+                flexGrow: 1,
               }}
             >
-              {heroDollar ? (
-                <span
-                  style={{
-                    fontSize: heroPct ? "80px" : "88px",
-                    fontWeight: 700,
-                    color: accentColor,
-                    lineHeight: "1",
-                  }}
-                >
-                  {heroDollar}
-                </span>
-              ) : null}
-              {heroPct ? (
-                <span
-                  style={{
-                    fontSize: heroDollar ? "40px" : "88px",
-                    fontWeight: 700,
-                    color: accentColor,
-                    opacity: heroDollar ? 0.75 : 1,
-                    lineHeight: "1",
-                    marginLeft: heroDollar ? "24px" : "0",
-                  }}
-                >
-                  {heroPct}
-                </span>
-              ) : null}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "row",
+                  alignItems: "baseline",
+                  justifyContent: "center",
+                }}
+              >
+                {heroDollar ? (
+                  <span
+                    style={{
+                      fontSize: heroPct ? "96px" : "108px",
+                      fontWeight: 700,
+                      color: accentColor,
+                      lineHeight: "1",
+                    }}
+                  >
+                    {heroDollar}
+                  </span>
+                ) : null}
+                {heroPct ? (
+                  <span
+                    style={{
+                      fontSize: heroDollar ? "48px" : "108px",
+                      fontWeight: 700,
+                      color: accentColor,
+                      opacity: heroDollar ? 0.75 : 1,
+                      lineHeight: "1",
+                      marginLeft: heroDollar ? "28px" : "0",
+                    }}
+                  >
+                    {heroPct}
+                  </span>
+                ) : null}
+              </div>
+              {/* Accent bar */}
+              <div
+                style={{
+                  display: "flex",
+                  width: "72px",
+                  height: "3px",
+                  background: accentColor,
+                  marginTop: "16px",
+                }}
+              />
             </div>
 
-            {/* Accent bar */}
-            <div
-              style={{
-                display: "flex",
-                width: "72px",
-                height: "3px",
-                background: accentColor,
-                marginBottom: "40px",
-              }}
-            />
-
-            {/* Detail items row — centered */}
+            {/* Bottom: Detail items — spread across full width */}
             {detailItems.length > 0 ? (
-              <div style={{ display: "flex", flexDirection: "row", justifyContent: "center" }}>
+              <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between" }}>
                 {detailItems.map((item, idx) => (
                   <div
                     key={idx}
                     style={{
                       display: "flex",
                       flexDirection: "column",
-                      alignItems: "center",
-                      marginRight: idx < detailItems.length - 1 ? "56px" : "0px",
+                      alignItems: idx === 0 ? "flex-start" : idx === detailItems.length - 1 ? "flex-end" : "center",
                     }}
                   >
                     <span
